@@ -12,8 +12,11 @@ struct ExeStart: AsyncParsableCommand {
           exestart runtime install          # tải Wine (một lần)
           exestart bottle create Office     # tạo môi trường Windows riêng
           exestart run ~/Downloads/setup.exe --bottle Office
+
+        Build .exe từ mã nguồn ngay trên Mac:
+          exestart build ./my-go-app --run
         """,
-        subcommands: [Run.self, RuntimeCmd.self, BottleCmd.self, Programs.self,
+        subcommands: [Run.self, Build.self, RuntimeCmd.self, BottleCmd.self, Programs.self,
                       Tricks.self, Tool.self, Shortcut.self, Kill.self, Doctor.self]
     )
 }

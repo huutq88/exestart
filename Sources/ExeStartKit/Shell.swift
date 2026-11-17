@@ -61,6 +61,62 @@ enum Shell {
         return output
     }
 
+    /// Chạy lệnh, đẩy từng đoạn output ra `output`, trả về mã thoát (không ném lỗi khi mã khác 0).
+    static func stream(_ executable: URL, _ arguments: [String],
+                       environment: [String: String]? = nil,
+                       currentDirectory: URL? = nil,
+                       output: (@Sendable (String) -> Void)? = nil) async throws -> Int32 {
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = arguments
+        if let environment { process.environment = environment }
+        if let currentDirectory { process.currentDirectoryURL = currentDirectory }
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        pipe.fileHandleForReading.readabilityHandler = { h in
+            let data = h.availableData
+            guard !data.isEmpty else { return }
+            output?(String(decoding: data, as: UTF8.self))
+        }
+        return try await withCheckedThrowingContinuation { cont in
+            process.terminationHandler = { p in
+                pipe.fileHandleForReading.readabilityHandler = nil
+                // Đọc nốt phần còn trong pipe.
+                let rest = pipe.fileHandleForReading.readDataToEndOfFile()
+                if !rest.isEmpty { output?(String(decoding: rest, as: UTF8.self)) }
+                cont.resume(returning: p.terminationStatus)
+            }
+            do { try process.run() } catch {
+                process.terminationHandler = nil
+                cont.resume(throwing: error)
+            }
+        }
+    }
+
+    /// Thư mục hay chứa công cụ dev nhưng có thể không nằm trong PATH của app GUI.
+    static var extraPaths: [String] {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return ["/opt/homebrew/bin", "/usr/local/bin", "\(home)/.cargo/bin", "/usr/local/go/bin",
+                "\(home)/go/bin", "/usr/local/share/dotnet", "\(home)/.dotnet"]
+    }
+
+    static var searchPath: String {
+        let current = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin"
+        return (current.split(separator: ":").map(String.init) + extraPaths)
+            .reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+            .joined(separator: ":")
+    }
+
+    /// Tìm file thực thi theo tên trong PATH (kèm extraPaths).
+    static func which(_ tool: String) -> URL? {
+        for dir in searchPath.split(separator: ":") {
+            let path = "\(dir)/\(tool)"
+            if FileManager.default.isExecutableFile(atPath: path) { return URL(fileURLWithPath: path) }
+        }
+        return nil
+    }
+
     static var rosettaInstalled: Bool {
         // Máy Intel không cần Rosetta.
         #if arch(arm64)

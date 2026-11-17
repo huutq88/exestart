@@ -116,3 +116,85 @@ final class ExeStartKitTests: XCTestCase {
         XCTAssertEqual(Shortcut.shellQuote("it's"), #"'it'\''s'"#)
     }
 }
+
+final class BuilderTests: XCTestCase {
+    var tmp: URL!
+
+    override func setUpWithError() throws {
+        tmp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws { try? FileManager.default.removeItem(at: tmp) }
+
+    private func project(_ name: String, files: [String]) throws -> URL {
+        let dir = tmp.appendingPathComponent(name)
+        for f in files {
+            let url = dir.appendingPathComponent(f)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            FileManager.default.createFile(atPath: url.path, contents: Data())
+        }
+        return dir
+    }
+
+    func testDetect() throws {
+        XCTAssertEqual(Builder.detect(try project("g", files: ["go.mod", "main.go"])), .go)
+        XCTAssertEqual(Builder.detect(try project("r", files: ["Cargo.toml", "src/main.rs"])), .rust)
+        XCTAssertEqual(Builder.detect(try project("m", files: ["CMakeLists.txt", "main.c"])), .cmake)
+        XCTAssertEqual(Builder.detect(try project("d", files: ["App.csproj"])), .dotnet)
+        XCTAssertEqual(Builder.detect(try project("p", files: ["main.py", "requirements.txt"])), .python)
+        XCTAssertEqual(Builder.detect(try project("cp", files: ["src/a.cpp", "src/b.c"])), .cpp)
+        XCTAssertEqual(Builder.detect(try project("c", files: ["hello.c"])), .c)
+        XCTAssertNil(Builder.detect(try project("e", files: ["README.md"])))
+        XCTAssertEqual(Builder.detect(tmp.appendingPathComponent("c/hello.c")), .c)
+    }
+
+    func testGoPlan() throws {
+        let dir = try project("tool", files: ["go.mod"])
+        let plan = try Builder().plan(dir, options: BuildOptions(arch: .x86, gui: true))
+        let step = try XCTUnwrap(plan.steps.first)
+        XCTAssertEqual(step.environment["GOOS"], "windows")
+        XCTAssertEqual(step.environment["GOARCH"], "386")
+        XCTAssertTrue(step.arguments.contains("-H windowsgui -s -w"))
+        XCTAssertEqual(plan.output.lastPathComponent, "tool.exe")
+        XCTAssertEqual(plan.output.deletingLastPathComponent().path, dir.appendingPathComponent("build/windows").path)
+    }
+
+    func testCPlanAndCustomOutput() throws {
+        let dir = try project("hello", files: ["hello.c", "util.c"])
+        let out = tmp.appendingPathComponent("out/app.exe")
+        let plan = try Builder().plan(dir, options: BuildOptions(gui: true, output: out))
+        let step = try XCTUnwrap(plan.steps.first)
+        XCTAssertEqual(step.tool, "x86_64-w64-mingw32-gcc")
+        XCTAssertTrue(step.arguments.contains("-static"))
+        XCTAssertTrue(step.arguments.contains("-mwindows"))
+        XCTAssertEqual(step.arguments.filter { $0.hasSuffix(".c") }.count, 2)
+        XCTAssertEqual(plan.output, out)
+    }
+
+    func testCMakeAndDotnetCollectOutput() throws {
+        let cm = try Builder().plan(try project("cm", files: ["CMakeLists.txt"]))
+        XCTAssertEqual(cm.steps.count, 2)
+        XCTAssertTrue(cm.steps[0].arguments.contains("-DCMAKE_SYSTEM_NAME=Windows"))
+        XCTAssertEqual(cm.collectTo?.lastPathComponent, "windows")
+        let dn = try Builder().plan(try project("dn", files: ["App.csproj"]))
+        XCTAssertTrue(dn.steps[0].arguments.contains("win-x64"))
+        XCTAssertTrue(dn.steps[0].arguments.contains("-p:EnableWindowsTargeting=true"))
+    }
+
+    func testPythonEntryPoint() throws {
+        let dir = try project("pyapp", files: ["helpers.py", "app.py"])
+        XCTAssertEqual(try PythonBuilder.entryPoint(for: dir).lastPathComponent, "app.py")
+        let single = try project("one", files: ["tool.py"])
+        XCTAssertEqual(try PythonBuilder.entryPoint(for: single).lastPathComponent, "tool.py")
+        let many = try project("many", files: ["a.py", "b.py"])
+        XCTAssertThrowsError(try PythonBuilder.entryPoint(for: many))
+        XCTAssertEqual(PythonBuilder.windowsPath(URL(fileURLWithPath: "/Users/a/b c/x.py")), #"Z:\Users\a\b c\x.py"#)
+    }
+
+    func testNewestExeSkipsDeps() throws {
+        let dir = try project("t", files: ["release/deps/old.exe", "release/app.exe"])
+        let found = Builder.newestExe(in: dir.appendingPathComponent("release"), since: Date().addingTimeInterval(-60))
+        XCTAssertEqual(found?.lastPathComponent, "app.exe")
+    }
+}

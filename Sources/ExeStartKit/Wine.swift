@@ -15,6 +15,8 @@ public struct Wine: Sendable {
         var env = ProcessInfo.processInfo.environment
         env["WINEPREFIX"] = bottle.prefix.path
         env["WINEDEBUG"] = verbose ? "err+all,warn+module" : "-all"
+        // MoltenVK (Vulkan → Metal) mặc định in hàng trăm dòng thông tin GPU vào log.
+        if !verbose, env["MVK_CONFIG_LOG_LEVEL"] == nil { env["MVK_CONFIG_LOG_LEVEL"] = "0" }
         env["PATH"] = runtime.binDirectory.path + ":" + (env["PATH"] ?? "/usr/bin:/bin")
         // Font chữ Việt/Á hiển thị đúng khi app không tự set locale.
         if env["LANG"] == nil { env["LANG"] = "en_US.UTF-8" }
