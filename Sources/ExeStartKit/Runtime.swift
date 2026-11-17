@@ -145,7 +145,6 @@ public final class RuntimeManager: @unchecked Sendable {
         let rt = try installArchive(archive, id: remote.id, channel: remote.channel, version: remote.version)
         try? FileManager.default.removeItem(at: archive)
         if settings().defaultRuntime == nil || installed().count == 1 { try setDefault(rt.id) }
-        progress?("Đã cài \(rt.displayName)", 1)
         return rt
     }
 
