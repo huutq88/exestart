@@ -287,6 +287,7 @@ struct Tricks: AsyncParsableCommand {
         commandName: "tricks", abstract: "Cài thư viện Windows bằng winetricks (vcrun2022, dotnet48, corefonts…).")
     @Argument(help: "Tên gói winetricks. Bỏ trống để xem gói hay dùng.") var verbs: [String] = []
     @Option(name: .shortAndLong) var bottle: String?
+    @Flag(name: .shortAndLong, help: "Tự cài công cụ còn thiếu (cabextract) qua Homebrew, không hỏi.") var yes = false
 
     func run() async throws {
         if verbs.isEmpty {
@@ -295,9 +296,8 @@ struct Tricks: AsyncParsableCommand {
             print("\nVí dụ: exestart tricks corefonts vcrun2022 --bottle Office")
             return
         }
-        let missing = Winetricks.missingTools
-        if !missing.isEmpty {
-            print("⚠ Thiếu \(missing.joined(separator: ", ")). Nhiều gói cần nó: brew install \(missing.joined(separator: " "))")
+        if !Winetricks.missingTools.isEmpty {
+            try await offerWinetricksTools(assumeYes: yes)
         }
         let b = try resolveBottle(bottle)
         let wine = try bottles.wine(for: b)
@@ -355,26 +355,86 @@ struct Kill: AsyncParsableCommand {
 // MARK: - doctor
 
 struct Doctor: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Kiểm tra máy đã sẵn sàng chạy Wine chưa.")
+    static let configuration = CommandConfiguration(
+        abstract: "Kiểm tra máy đã sẵn sàng chạy Wine chưa (--fix để cài phần còn thiếu).")
+    @Flag(help: "Cài những thứ còn thiếu: Wine runtime, cabextract (qua Homebrew).") var fix = false
+    @Flag(name: .shortAndLong, help: "Dùng với --fix: không hỏi lại.") var yes = false
+
     func run() async throws {
+        if fix { try await repair() }
+        report()
+    }
+
+    private func report() {
         func line(_ ok: Bool, _ text: String, _ fix: String? = nil) {
             print("\(ok ? "✔" : "✘") \(text)")
             if !ok, let fix { print("    → \(fix)") }
         }
         #if arch(arm64)
-        let rosetta = FileManager.default.fileExists(atPath: "/Library/Apple/usr/libexec/oah/libRosettaRuntime")
-        line(rosetta, "Rosetta 2", "softwareupdate --install-rosetta --agree-to-license")
+        line(rosettaInstalled, "Rosetta 2", "softwareupdate --install-rosetta --agree-to-license")
         #endif
         let runtimes = bottles.runtimes.installed()
-        line(!runtimes.isEmpty, "Wine runtime (\(runtimes.map(\.id).joined(separator: ", ")))", "exestart runtime install")
+        line(!runtimes.isEmpty, "Wine runtime (\(runtimes.map(\.id).joined(separator: ", ")))", "exestart doctor --fix")
         if let rt = try? bottles.runtimes.runtime(id: nil),
            let version = try? Process.output(rt.wineBinary.path, ["--version"]) {
             print("    \(version.trimmingCharacters(in: .whitespacesAndNewlines))")
         }
-        let missing = Winetricks.missingTools
-        line(missing.isEmpty, "cabextract (cho winetricks)", "brew install cabextract")
+        line(Winetricks.missingTools.isEmpty, "cabextract (cho winetricks)",
+             Homebrew.isInstalled ? "exestart doctor --fix" : "Cài Homebrew (\(Homebrew.website)) rồi: brew install cabextract")
         line(true, "Thư mục dữ liệu: \(Paths.shared.root.path)")
     }
+
+    private var rosettaInstalled: Bool {
+        FileManager.default.fileExists(atPath: "/Library/Apple/usr/libexec/oah/libRosettaRuntime")
+    }
+
+    private func repair() async throws {
+        var changed = false
+        #if arch(arm64)
+        if !rosettaInstalled {
+            // Cần quyền admin và đồng ý giấy phép Apple — để người dùng tự chạy.
+            print("Rosetta 2 cần quyền quản trị, hãy tự chạy: softwareupdate --install-rosetta --agree-to-license\n")
+        }
+        #endif
+        if bottles.runtimes.installed().isEmpty {
+            let list = try await bottles.runtimes.available()
+            if let pick = list.first(where: { $0.channel == "stable" }),
+               yes || confirm("Tải và cài \(pick.id) (\(pick.sizeText) từ GitHub)?") {
+                let bar = ProgressBar()
+                try await bottles.runtimes.install(pick) { label, p in bar.update(label, p) }
+                changed = true
+            }
+        }
+        if !Winetricks.missingTools.isEmpty {
+            try await offerWinetricksTools(assumeYes: yes)
+            changed = true
+        }
+        print(changed ? "" : "Không có gì cần sửa.\n")
+    }
+}
+
+/// Hỏi y/N trên terminal. Không có terminal (chạy trong script) thì coi là "không".
+func confirm(_ question: String) -> Bool {
+    guard isatty(STDIN_FILENO) != 0 else { return false }
+    print("\(question) [y/N] ", terminator: "")
+    fflush(stdout)
+    return ["y", "yes", "có", "co"].contains(readLine()?.lowercased().trimmingCharacters(in: .whitespaces) ?? "")
+}
+
+/// Thiếu cabextract: hỏi rồi cài qua Homebrew. Không bao giờ chặn lệnh nếu người dùng từ chối.
+func offerWinetricksTools(assumeYes: Bool) async throws {
+    let missing = Winetricks.missingTools
+    let names = missing.joined(separator: ", ")
+    guard Homebrew.isInstalled else {
+        print("⚠ Thiếu \(names) — nhiều gói winetricks sẽ lỗi. Cài Homebrew (\(Homebrew.website)) rồi chạy: brew install \(missing.joined(separator: " "))")
+        return
+    }
+    guard assumeYes || confirm("Thiếu \(names) (winetricks cần để giải nén file .cab). Cài bằng Homebrew?") else {
+        print("Bỏ qua. Tự cài sau bằng: brew install \(missing.joined(separator: " "))")
+        return
+    }
+    let ok = try await Homebrew.installWinetricksTools { FileHandle.standardOutput.write(Data($0.utf8)) }
+    print(ok ? "✔ Đã cài \(names)." : "⚠ Cài xong nhưng vẫn chưa thấy \(names) trong PATH.")
 }
 
 extension Process {

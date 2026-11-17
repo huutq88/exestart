@@ -146,20 +146,13 @@ struct LibraryView: View {
     @State private var running: String?
     @State private var log = ""
     @State private var lastResult: (verb: String, ok: Bool)?
+    @State private var missingTools = Winetricks.missingTools
+    @State private var installingTools = false
 
     var body: some View {
         VStack(spacing: 0) {
             List {
-                if !Winetricks.missingTools.isEmpty {
-                    Label {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Thiếu cabextract — nhiều gói sẽ cài thất bại.")
-                            Text("Mở Terminal và chạy: brew install cabextract").font(.callout).textSelection(.enabled)
-                        }
-                    } icon: {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                    }
-                }
+                if !missingTools.isEmpty { missingToolsBanner }
                 Section {
                     ForEach(Winetricks.common, id: \.verb) { item in
                         HStack {
@@ -177,7 +170,7 @@ struct LibraryView: View {
                                         .foregroundStyle(r.ok ? .green : .red)
                                 }
                                 Button("Cài") { install(item.verb) }
-                                    .disabled(running != nil)
+                                    .disabled(running != nil || installingTools)
                             }
                         }
                     }
@@ -205,6 +198,56 @@ struct LibraryView: View {
                 }
                 .accessibilityLabel("Nhật ký cài đặt")
             }
+        }
+    }
+
+    /// Báo thiếu cabextract, kèm nút cài qua Homebrew (hoặc link cài Homebrew nếu máy chưa có).
+    private var missingToolsBanner: some View {
+        let names = missingTools.joined(separator: ", ")
+        return HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Thiếu \(names) — nhiều gói sẽ cài thất bại.")
+                Text(Homebrew.isInstalled
+                     ? "ExeStart có thể cài \(names) bằng Homebrew (vài giây)."
+                     : "Cần Homebrew để cài \(names). Cài Homebrew xong, mở lại tab này.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if installingTools {
+                ProgressView().controlSize(.small)
+                Text("Đang cài…").foregroundStyle(.secondary)
+            } else if Homebrew.isInstalled {
+                Button("Cài \(names)") { installTools() }
+                    .disabled(running != nil)
+            } else {
+                Link("Mở brew.sh", destination: URL(string: Homebrew.website)!)
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func installTools() {
+        guard !installingTools, running == nil else { return }
+        installingTools = true
+        log = ""
+        Task {
+            do {
+                let ok = try await Homebrew.installWinetricksTools { chunk in
+                    Task { @MainActor in log += chunk }
+                }
+                missingTools = Winetricks.missingTools
+                model.show(ok ? .success : .error,
+                           ok ? "Đã cài cabextract. Giờ có thể cài các gói bên dưới."
+                              : "Homebrew chạy xong nhưng vẫn chưa thấy cabextract. Xem nhật ký bên dưới.")
+            } catch {
+                model.show(.error, "Chưa cài được cabextract: \(error.localizedDescription). Có thể tự chạy trong Terminal: brew install cabextract")
+            }
+            installingTools = false
         }
     }
 

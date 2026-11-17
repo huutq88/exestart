@@ -18,7 +18,7 @@ Gồm hai phần dùng chung một lõi (`ExeStartKit`):
 - macOS 14 trở lên, Apple Silicon hoặc Intel
 - Apple Silicon cần Rosetta 2: `softwareupdate --install-rosetta --agree-to-license`
 - Build từ mã nguồn: Xcode 16+ / Swift 6
-- Tuỳ chọn, cho winetricks: `brew install cabextract`
+- Cho winetricks: `cabextract`. ExeStart hỏi rồi tự cài qua Homebrew khi cần (`exestart doctor --fix`, hoặc nút **Cài cabextract** trong tab Thư viện)
 
 ## Cài đặt
 
@@ -40,6 +40,7 @@ Lệnh trên tạo `~/Applications/ExeStart.app` và `~/.local/bin/exestart`. B�
 
 ```bash
 exestart doctor                                  # kiểm tra Rosetta, Wine, cabextract
+exestart doctor --fix                            # cài phần còn thiếu (Wine, cabextract qua Homebrew)
 exestart runtime install                         # tải Wine stable mới nhất
 exestart bottle create "Van phong" --windows win10
 exestart run ~/Downloads/setup.exe -b "Van phong"

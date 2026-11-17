@@ -25,12 +25,15 @@ public struct Winetricks: Sendable {
 
     public var scriptPath: URL { paths.cache.appendingPathComponent("winetricks") }
 
-    /// cabextract cần cho phần lớn gói của winetricks.
+    /// Công cụ ngoài mà winetricks cần (cabextract giải nén file .cab của Microsoft).
+    /// Tên công cụ trùng tên formula Homebrew.
+    public static let requiredTools = ["cabextract"]
+
     public static var missingTools: [String] {
-        let dirs = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
-        return ["cabextract"].filter { tool in
-            !dirs.contains { FileManager.default.isExecutableFile(atPath: "\($0)/\(tool)") }
-        }
+        // EXESTART_ASSUME_MISSING=cabextract: giả lập thiếu công cụ để thử luồng cài đặt.
+        let forced = Set((ProcessInfo.processInfo.environment["EXESTART_ASSUME_MISSING"] ?? "")
+            .split(separator: ",").map(String.init))
+        return requiredTools.filter { forced.contains($0) || Shell.which($0) == nil }
     }
 
     public func ensureScript(forceUpdate: Bool = false) async throws -> URL {
