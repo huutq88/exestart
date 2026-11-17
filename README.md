@@ -100,4 +100,4 @@ scripts/build-app.sh
 
 ## Giấy phép
 
-Chưa chọn. Wine dùng giấy phép LGPL và chỉ được tải về lúc chạy, không phân phối kèm repo này.
+[MIT](LICENSE). Wine (LGPL) không nằm trong repo này: ExeStart tải Wine về lúc chạy và gọi nó như một chương trình riêng, nên giấy phép của Wine áp dụng cho chính Wine, không áp dụng cho ExeStart.
