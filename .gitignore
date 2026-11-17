@@ -1,0 +1,7 @@
+.build/
+.swiftpm/
+dist/
+.DS_Store
+# Không bao giờ commit Wine hay dữ liệu bottle
+*.tar.xz
+.scratch-home/
