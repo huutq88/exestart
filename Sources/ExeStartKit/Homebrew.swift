@@ -1,28 +1,28 @@
 import Foundation
 
-/// Cài công cụ phụ trợ (vd. cabextract) qua Homebrew — chỉ khi người dùng đồng ý.
+/// Installs helper tools (e.g. cabextract) via Homebrew, only with the user's consent.
 public enum Homebrew {
     public static let website = "https://brew.sh"
 
     public static var executable: URL? { Shell.which("brew") }
     public static var isInstalled: Bool { executable != nil }
 
-    /// `brew install <formulae>`, đẩy output ra `output`. Trả về mã thoát.
+    /// Runs `brew install <formulae>`, streaming output to `output`. Returns the exit code.
     public static func install(_ formulae: [String],
                                output: (@Sendable (String) -> Void)? = nil) async throws -> Int32 {
         guard let brew = executable else {
-            throw BuildError.missingTools([("brew", "Cài Homebrew tại \(website)")])
+            throw BuildError.missingTools([("brew", "Install Homebrew from \(website)")])
         }
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = Shell.searchPath
         env["HOMEBREW_NO_ENV_HINTS"] = "1"
-        // Không hỏi gì trên terminal: app GUI không có stdin.
+        // Never prompt on the terminal: the GUI app has no stdin.
         env["NONINTERACTIVE"] = "1"
         output?("$ brew install \(formulae.joined(separator: " "))\n")
         return try await Shell.stream(brew, ["install"] + formulae, environment: env, output: output)
     }
 
-    /// Cài các công cụ winetricks còn thiếu. Trả về true nếu sau đó không còn thiếu gì.
+    /// Installs missing winetricks tools. Returns true if nothing is missing afterwards.
     @discardableResult
     public static func installWinetricksTools(output: (@Sendable (String) -> Void)? = nil) async throws -> Bool {
         let missing = Winetricks.missingTools

@@ -1,130 +1,130 @@
 # ExeStart
 
-Chạy ứng dụng Windows (`.exe`, `.msi`, `.bat`, `.lnk`) trực tiếp trên macOS, **không cần máy ảo, không cần bản quyền Windows**.
+Run Windows apps (`.exe`, `.msi`, `.bat`, `.lnk`) directly on macOS. **No virtual machine, no Windows license.**
 
-ExeStart quản lý [Wine](https://www.winehq.org/) giúp bạn: tự tải bản Wine build sẵn cho macOS, tạo các "bottle" (mỗi bottle là một ổ `C:` Windows riêng), chạy chương trình, cài thư viện Windows qua winetricks và tạo shortcut `.app` để mở chương trình như app Mac.
+ExeStart manages [Wine](https://www.winehq.org/) for you. It downloads a prebuilt Wine for macOS, creates "bottles" (each bottle is its own Windows `C:` drive), runs programs, installs Windows libraries through winetricks, and creates `.app` shortcuts so Windows programs open like Mac apps.
 
-Ngoài ra, `exestart build` **build mã nguồn thành `.exe` Windows ngay trên Mac** (Go, Rust, C/C++, .NET, Python) rồi chạy thử bằng Wine, không cần máy Windows.
+`exestart build` also **compiles source code into Windows `.exe` files right on your Mac** (Go, Rust, C/C++, .NET, Python) and can test-run the result with Wine. No Windows machine required.
 
-Gồm hai phần dùng chung một lõi (`ExeStartKit`):
+Two front ends share one core library (`ExeStartKit`):
 
-- **ExeStart.app** — giao diện SwiftUI: kéo thả `.exe`, danh sách chương trình, cài thư viện, chỉnh cấu hình.
-- **`exestart`** — CLI cho người thích Terminal hoặc muốn viết script.
+- **ExeStart.app**: a SwiftUI app. Drag and drop `.exe` files, browse installed programs, install libraries, adjust settings.
+- **`exestart`**: a CLI for Terminal users and scripts.
 
-> Dự án không chính thức, không liên quan tới Microsoft, WineHQ hay CodeWeavers.
+> Unofficial project. Not affiliated with Microsoft, WineHQ or CodeWeavers.
 
-## Yêu cầu
+## Requirements
 
-- macOS 14 trở lên, Apple Silicon hoặc Intel
-- Apple Silicon cần Rosetta 2: `softwareupdate --install-rosetta --agree-to-license`
-- Build từ mã nguồn: Xcode 16+ / Swift 6
-- Cho winetricks: `cabextract`. ExeStart hỏi rồi tự cài qua Homebrew khi cần (`exestart doctor --fix`, hoặc nút **Cài cabextract** trong tab Thư viện)
+- macOS 14 or later, Apple Silicon or Intel
+- Apple Silicon needs Rosetta 2: `softwareupdate --install-rosetta --agree-to-license`
+- Building from source: Xcode 16+ / Swift 6
+- For winetricks: `cabextract`. ExeStart offers to install it through Homebrew when needed (`exestart doctor --fix`, or the **Install cabextract** button in the Libraries tab)
 
-## Cài đặt
+## Install
 
 ```bash
-git clone <repo-url> exestart && cd exestart
+git clone https://github.com/huutq88/exestart.git && cd exestart
 ./scripts/build-app.sh --install
 ```
 
-Lệnh trên tạo `~/Applications/ExeStart.app` và `~/.local/bin/exestart`. Bỏ `--install` để chỉ build vào `dist/`.
+This installs `~/Applications/ExeStart.app` and `~/.local/bin/exestart`. Leave out `--install` to only build into `dist/`.
 
-## Dùng app
+## Using the app
 
-1. Mở **ExeStart** → bấm **Tải và cài Wine** (khoảng 185 MB, làm một lần). App tự tạo bottle `Default`.
-2. Kéo file `.exe`/`.msi` vào cửa sổ, hoặc bấm **Chạy file .exe…** (⌘O).
-3. Sau khi cài, chương trình hiện trong tab **Chương trình**. Nháy đúp để mở, chuột phải → **Tạo app trong Launchpad**.
-4. Trong Finder: chuột phải file `.exe` → **Open With → ExeStart**.
+1. Open **ExeStart** and click **Download and Install Wine** (about 185 MB, one time only). The app creates a `Default` bottle.
+2. Drag an `.exe`/`.msi` file onto the window, or click **Run .exe File…** in the toolbar (or File → **Run Windows Program…**, ⌘O).
+3. Installed programs appear in the **Programs** tab. Double-click to open; right-click → **Add to Launchpad** to create a Mac shortcut.
+4. In Finder: right-click an `.exe` file → **Open With → ExeStart**.
 
-## Dùng CLI
+## Using the CLI
 
 ```bash
-exestart doctor                                  # kiểm tra Rosetta, Wine, cabextract
-exestart doctor --fix                            # cài phần còn thiếu (Wine, cabextract qua Homebrew)
-exestart runtime install                         # tải Wine stable mới nhất
-exestart bottle create "Van phong" --windows win10
-exestart run ~/Downloads/setup.exe -b "Van phong"
-exestart programs -b "Van phong"                 # liệt kê chương trình đã cài
-exestart shortcut "~/Library/Application Support/ExeStart/Bottles/Van phong/prefix/drive_c/Program Files/App/App.exe" -b "Van phong"
-exestart tricks corefonts vcrun2022 -b "Van phong"
-exestart tool winecfg -b "Van phong"             # winecfg, regedit, taskmgr, control, uninstaller, explorer, cmd
-exestart bottle set "Van phong" --retina on --dpi 144
-exestart kill --all                              # tắt mọi chương trình đang treo
+exestart doctor                                  # check Rosetta, Wine, cabextract
+exestart doctor --fix                            # install what's missing (Wine, cabextract via Homebrew)
+exestart runtime install                         # download the latest stable Wine
+exestart bottle create Office --windows win10
+exestart run ~/Downloads/setup.exe -b Office
+exestart programs -b Office                      # list installed programs
+exestart shortcut "~/Library/Application Support/ExeStart/Bottles/Office/prefix/drive_c/Program Files/App/App.exe" -b Office
+exestart tricks corefonts vcrun2022 -b Office
+exestart tool winecfg -b Office                  # winecfg, regedit, taskmgr, control, uninstaller, explorer, cmd
+exestart bottle set Office --retina on --dpi 144
+exestart kill --all                              # stop every running Windows program
 ```
 
-Truyền tham số cho chương trình sau `--`: `exestart run app.exe -- /silent`.
-Gỡ lỗi: thêm `-v` để bật log Wine chi tiết. Mỗi lần chạy đều ghi log vào thư mục `logs/` của bottle.
+Pass arguments to the program after `--`: `exestart run app.exe -- /silent`.
+Debugging: add `-v` for verbose Wine logs. Every run writes a log to the bottle's `logs/` folder.
 
-## Build file .exe trên Mac
+## Building .exe files on a Mac
 
 ```bash
-exestart build                          # build thư mục hiện tại (tự nhận diện ngôn ngữ)
-exestart build ./my-app --run           # build xong chạy thử luôn bằng Wine
-exestart build ./hello.c --gui          # app có cửa sổ, không mở kèm console
+exestart build                          # build the current folder (language is auto-detected)
+exestart build ./my-app --run           # build, then test-run it with Wine
+exestart build ./hello.c --gui          # windowed app, no console window
 exestart build ./tool --arch x86 -o dist/tool32.exe
-exestart build --dry-run                # chỉ in lệnh sẽ chạy và công cụ còn thiếu
+exestart build --dry-run                # only print the commands and any missing tools
 ```
 
-Kết quả mặc định nằm ở `<dự án>/build/windows/`.
+Output goes to `<project>/build/windows/` by default.
 
-| Dự án | Nhận diện qua | Cách build | Cần cài |
+| Project | Detected by | How it builds | Requires |
 |---|---|---|---|
 | Go | `go.mod`, `*.go` | `GOOS=windows go build` | `brew install go` |
-| Rust | `Cargo.toml` | `cargo xwin build` (target MSVC), nếu không có thì target GNU + MinGW | `rustup target add x86_64-pc-windows-gnu` + `brew install mingw-w64`, hoặc `cargo install cargo-xwin` |
-| C / C++ | `*.c`, `*.cpp` | MinGW-w64, link tĩnh | `brew install mingw-w64` |
-| CMake | `CMakeLists.txt` | CMake + toolchain MinGW-w64 | `brew install cmake mingw-w64` |
-| .NET | `*.csproj`, `*.sln` | `dotnet publish -r win-x64`, ra một file duy nhất | `brew install --cask dotnet-sdk` |
-| Python | `*.py`, `requirements.txt` | PyInstaller chạy trong Python **bản Windows** qua Wine | Chỉ cần Wine. Lần đầu tự tải Python 3.12 từ python.org (~27 MB) vào bottle "Python Build" |
+| Rust | `Cargo.toml` | `cargo xwin build` (MSVC target); otherwise the GNU target with MinGW | `rustup target add x86_64-pc-windows-gnu` + `brew install mingw-w64`, or `cargo install cargo-xwin` |
+| C / C++ | `*.c`, `*.cpp` | MinGW-w64, statically linked | `brew install mingw-w64` |
+| CMake | `CMakeLists.txt` | CMake with a MinGW-w64 toolchain | `brew install cmake mingw-w64` |
+| .NET | `*.csproj`, `*.sln` | `dotnet publish -r win-x64` as a single file | `brew install --cask dotnet-sdk` |
+| Python | `*.py`, `requirements.txt` | PyInstaller running in **Windows** Python under Wine | Only Wine. The first build downloads Python 3.12 from python.org (~27 MB) into a "Python Build" bottle |
 
-Python không biên dịch chéo được: PyInstaller chạy trên Mac chỉ ra file chạy cho Mac. Vì vậy ExeStart chạy Python bản Windows bên trong Wine để ra `.exe` thật.
+Python can't be cross-compiled: PyInstaller on macOS only produces Mac executables. ExeStart therefore runs the Windows build of Python inside Wine to produce a real `.exe`.
 
-## Dữ liệu nằm ở đâu
+## Where data lives
 
 ```
 ~/Library/Application Support/ExeStart/
-├── Runtimes/wine-stable-11.0_1/   # các bản Wine
-├── Bottles/<tên>/
-│   ├── bottle.json                # cấu hình
-│   ├── prefix/drive_c/            # ổ C: của Windows
+├── Runtimes/wine-stable-11.0_1/   # Wine versions
+├── Bottles/<name>/
+│   ├── bottle.json                # settings
+│   ├── prefix/drive_c/            # the Windows C: drive
 │   └── logs/
-├── Cache/                         # winetricks, file tải dở
-└── settings.json                  # runtime mặc định
-~/Applications/ExeStart/*.app      # shortcut đã tạo
+├── Cache/                         # winetricks, partial downloads
+└── settings.json                  # default runtime
+~/Applications/ExeStart/*.app      # shortcuts you created
 ```
 
-Đặt `EXESTART_HOME=/đường/dẫn` để dùng thư mục khác (tiện khi test).
+Set `EXESTART_HOME=/some/path` to use a different folder (handy for testing).
 
-## Cách hoạt động
+## How it works
 
-- **Wine** dịch lệnh gọi Windows API sang macOS. Đây không phải giả lập hay máy ảo, chương trình chạy như tiến trình bình thường. Trên Apple Silicon, mã x86 chạy qua Rosetta 2.
-- Bản Wine lấy từ [Gcenx/macOS_Wine_builds](https://github.com/Gcenx/macOS_Wine_builds), chính là bản mà cask `wine-stable` của Homebrew dùng trước khi Homebrew tắt cask này (01/09/2026).
-- Mỗi bottle là một `WINEPREFIX` riêng, nên chương trình trong bottle này không ảnh hưởng bottle khác.
+- **Wine** translates Windows API calls into macOS calls. It is not an emulator or a virtual machine: programs run as normal processes. On Apple Silicon, x86 code runs through Rosetta 2.
+- Wine builds come from [Gcenx/macOS_Wine_builds](https://github.com/Gcenx/macOS_Wine_builds), the same builds Homebrew's `wine-stable` cask used before Homebrew disabled that cask on 2026-09-01.
+- Each bottle is a separate `WINEPREFIX`, so programs in one bottle don't affect another.
 
-## Giới hạn
+## Limitations
 
-- Không phải app nào cũng chạy được. Xem độ tương thích tại [Wine AppDB](https://appdb.winehq.org/).
-- Phần mềm có anti-cheat cấp kernel, driver thiết bị, hoặc phụ thuộc sâu vào dịch vụ Windows (Office 365 bản mới, Visual Studio) thường không chạy.
-- Game DirectX 10–12 cần D3DMetal hoặc DXVK, phiên bản này chưa tích hợp.
-- `exestart build` chỉ bọc các trình biên dịch chéo có sẵn. Dự án cần Visual Studio/MSBuild bản Windows (C++ dùng MFC/ATL, driver, file `.vcxproj`) chưa build được.
-- Build Python mới hỗ trợ x64. Thư viện có phần mã native phải có wheel cho Windows trên PyPI.
+- Not every app works. Check compatibility on the [Wine AppDB](https://appdb.winehq.org/).
+- Software with kernel-level anti-cheat, device drivers, or deep dependencies on Windows services (recent Office 365, Visual Studio) usually won't run.
+- DirectX 10–12 games need D3DMetal or DXVK, which this version doesn't integrate yet.
+- `exestart build` only wraps existing cross-compilers. Projects that need Visual Studio/MSBuild on Windows (C++ with MFC/ATL, drivers, `.vcxproj` files) can't be built yet.
+- Python builds are x64 only. Packages with native code need Windows wheels on PyPI.
 
-## Phát triển
+## Development
 
 ```bash
-swift build                 # build tất cả
-swift test                  # unit test cho ExeStartKit
+swift build                 # build everything
+swift test                  # unit tests for ExeStartKit
 swift run exestart --help
-swift run ExeStartApp       # mở app không cần đóng gói
+swift run ExeStartApp       # run the app without packaging
 ```
 
 ```
 Sources/
-├── ExeStartKit/   # lõi: Runtime, Bottle, Wine, Winetricks, Shortcut, Builder, PythonBuilder
+├── ExeStartKit/   # core: Runtime, Bottle, Wine, Winetricks, Shortcut, Builder, PythonBuilder, Homebrew
 ├── exestart/      # CLI (swift-argument-parser)
-└── ExeStartApp/   # app SwiftUI
+└── ExeStartApp/   # SwiftUI app
 scripts/build-app.sh
 ```
 
-## Giấy phép
+## License
 
-[MIT](LICENSE). Wine (LGPL) không nằm trong repo này: ExeStart tải Wine về lúc chạy và gọi nó như một chương trình riêng, nên giấy phép của Wine áp dụng cho chính Wine, không áp dụng cho ExeStart.
+[MIT](LICENSE). Wine (LGPL) is not part of this repository: ExeStart downloads Wine at runtime and invokes it as a separate program, so Wine's license applies to Wine itself, not to ExeStart.

@@ -1,22 +1,22 @@
 import Foundation
 
-/// Cài thư viện Windows (vcrun, .NET, font...) vào bottle bằng winetricks.
+/// Installs Windows libraries (vcrun, .NET, fonts...) into a bottle with winetricks.
 public struct Winetricks: Sendable {
     public static let scriptURL = URL(string: "https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks")!
 
-    /// Các gói hay dùng cho app văn phòng/công cụ.
+    /// Packages commonly needed by office apps and utilities.
     public static let common: [(verb: String, title: String)] = [
-        ("corefonts", "Font Microsoft cơ bản (Arial, Times...)"),
-        ("tahoma", "Font Tahoma"),
-        ("cjkfonts", "Font Trung/Nhật/Hàn"),
+        ("corefonts", "Microsoft core fonts (Arial, Times...)"),
+        ("tahoma", "Tahoma font"),
+        ("cjkfonts", "Chinese/Japanese/Korean fonts"),
         ("vcrun2022", "Visual C++ 2015–2022 runtime"),
         ("vcrun2013", "Visual C++ 2013 runtime"),
         ("vcrun2010", "Visual C++ 2010 runtime"),
         ("dotnet48", ".NET Framework 4.8"),
         ("dotnetdesktop8", ".NET Desktop Runtime 8"),
         ("msxml6", "MSXML 6"),
-        ("gdiplus", "GDI+ gốc của Microsoft"),
-        ("riched20", "RichEdit gốc (sửa lỗi ô nhập văn bản)"),
+        ("gdiplus", "Native Microsoft GDI+"),
+        ("riched20", "Native RichEdit (fixes text input fields)"),
         ("mfc140", "MFC 14"),
     ]
 
@@ -25,12 +25,12 @@ public struct Winetricks: Sendable {
 
     public var scriptPath: URL { paths.cache.appendingPathComponent("winetricks") }
 
-    /// Công cụ ngoài mà winetricks cần (cabextract giải nén file .cab của Microsoft).
-    /// Tên công cụ trùng tên formula Homebrew.
+    /// External tools winetricks needs (cabextract unpacks Microsoft .cab files).
+    /// Tool names match their Homebrew formula names.
     public static let requiredTools = ["cabextract"]
 
     public static var missingTools: [String] {
-        // EXESTART_ASSUME_MISSING=cabextract: giả lập thiếu công cụ để thử luồng cài đặt.
+        // EXESTART_ASSUME_MISSING=cabextract: pretend the tool is missing to test the install flow.
         let forced = Set((ProcessInfo.processInfo.environment["EXESTART_ASSUME_MISSING"] ?? "")
             .split(separator: ",").map(String.init))
         return requiredTools.filter { forced.contains($0) || Shell.which($0) == nil }
@@ -45,7 +45,7 @@ public struct Winetricks: Sendable {
         return scriptPath
     }
 
-    /// Chạy winetricks, đẩy từng dòng output ra `output`. Trả về mã thoát.
+    /// Runs winetricks, streaming each output line to `output`. Returns the exit code.
     public func run(_ verbs: [String], wine: Wine,
                     output: (@Sendable (String) -> Void)? = nil) async throws -> Int32 {
         let script = try await ensureScript()

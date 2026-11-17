@@ -1,10 +1,10 @@
 import Foundation
 
-/// Một bản Wine đã cài trong ExeStart/Runtimes/<id>.
+/// A Wine build installed in ExeStart/Runtimes/<id>.
 public struct Runtime: Codable, Hashable, Identifiable, Sendable {
-    public let id: String          // vd. "wine-stable-11.0_1"
+    public let id: String          // e.g. "wine-stable-11.0_1"
     public let channel: String     // stable | devel | staging
-    public let version: String     // vd. "11.0_1"
+    public let version: String     // e.g. "11.0_1"
     public let directory: URL
     public let wineBinary: URL
 
@@ -13,7 +13,7 @@ public struct Runtime: Codable, Hashable, Identifiable, Sendable {
     public var displayName: String { "Wine \(channel.capitalized) \(version)" }
 }
 
-/// Một bản Wine có thể tải về.
+/// A Wine build available for download.
 public struct RemoteRuntime: Hashable, Identifiable, Sendable {
     public let id: String
     public let channel: String
@@ -38,7 +38,7 @@ public final class RuntimeManager: @unchecked Sendable {
     public let paths: Paths
     public init(paths: Paths = .shared) { self.paths = paths }
 
-    // MARK: Cài đặt cục bộ
+    // MARK: Local installs
 
     public func installed() -> [Runtime] {
         let fm = FileManager.default
@@ -82,7 +82,7 @@ public final class RuntimeManager: @unchecked Sendable {
         try FileManager.default.removeItem(at: rt.directory)
     }
 
-    // MARK: Bản có thể tải
+    // MARK: Available downloads
 
     public func available() async throws -> [RemoteRuntime] {
         var request = URLRequest(url: Self.releasesAPI)
@@ -90,12 +90,12 @@ public final class RuntimeManager: @unchecked Sendable {
         request.setValue("ExeStart", forHTTPHeaderField: "User-Agent")
         let (data, response) = try await URLSession.shared.data(for: request)
         if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-            throw ExeStartError.download("GitHub API trả về HTTP \(http.statusCode)")
+            throw ExeStartError.download("GitHub API returned HTTP \(http.statusCode)")
         }
         return try Self.parseReleases(data)
     }
 
-    /// Đọc JSON releases của GitHub, lấy các asset `wine-<channel>-<version>-osx64.tar.xz`.
+    /// Parses GitHub releases JSON and picks the `wine-<channel>-<version>-osx64.tar.xz` assets.
     static func parseReleases(_ data: Data) throws -> [RemoteRuntime] {
         struct Release: Decodable {
             struct Asset: Decodable { let name: String; let size: Int64; let browser_download_url: URL }
@@ -128,7 +128,7 @@ public final class RuntimeManager: @unchecked Sendable {
         return (channel, version)
     }
 
-    /// Tải và cài một runtime. `channel` mặc định là stable, lấy bản mới nhất.
+    /// Downloads and installs a runtime. `channel` defaults to stable; picks the latest version.
     @discardableResult
     public func install(_ remote: RemoteRuntime,
                         progress: (@Sendable (String, Double?) -> Void)? = nil) async throws -> Runtime {
@@ -136,19 +136,19 @@ public final class RuntimeManager: @unchecked Sendable {
         try paths.ensureExists()
         let archive = paths.cache.appendingPathComponent(remote.url.lastPathComponent)
         if !FileManager.default.fileExists(atPath: archive.path) {
-            progress?("Đang tải \(remote.id) (\(remote.sizeText))", 0)
+            progress?("Downloading \(remote.id) (\(remote.sizeText))", 0)
             let partial = archive.appendingPathExtension("part")
-            _ = try await Downloader.download(remote.url, to: partial) { p in progress?("Đang tải", p) }
+            _ = try await Downloader.download(remote.url, to: partial) { p in progress?("Downloading", p) }
             try FileManager.default.moveItem(at: partial, to: archive)
         }
-        progress?("Đang giải nén", nil)
+        progress?("Extracting", nil)
         let rt = try installArchive(archive, id: remote.id, channel: remote.channel, version: remote.version)
         try? FileManager.default.removeItem(at: archive)
         if settings().defaultRuntime == nil || installed().count == 1 { try setDefault(rt.id) }
         return rt
     }
 
-    /// Giải nén file .tar.xz vào Runtimes/<id> và ghi runtime.json.
+    /// Extracts the .tar.xz into Runtimes/<id> and writes runtime.json.
     func installArchive(_ archive: URL, id: String, channel: String, version: String) throws -> Runtime {
         let fm = FileManager.default
         let target = paths.runtimes.appendingPathComponent(id, isDirectory: true)
@@ -156,11 +156,11 @@ public final class RuntimeManager: @unchecked Sendable {
         try? fm.removeItem(at: staging)
         try fm.createDirectory(at: staging, withIntermediateDirectories: true)
         try Shell.run("/usr/bin/tar", ["-xJf", archive.path, "-C", staging.path])
-        // Bỏ cờ quarantine để Gatekeeper không chặn các dylib bên trong.
+        // Remove the quarantine flag so Gatekeeper doesn't block the bundled dylibs.
         _ = try? Shell.run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", staging.path])
 
         guard let wine = Self.findWineBinary(in: staging) else {
-            throw ExeStartError.download("Không thấy file wine trong gói \(archive.lastPathComponent)")
+            throw ExeStartError.download("No wine binary found in \(archive.lastPathComponent)")
         }
         try? fm.removeItem(at: target)
         try fm.moveItem(at: staging, to: target)
@@ -173,8 +173,8 @@ public final class RuntimeManager: @unchecked Sendable {
         return rt
     }
 
-    /// Gói Gcenx có dạng "Wine Stable.app/Contents/Resources/wine/bin/wine".
-    /// Wine ≥ 10 chỉ còn `wine` (WoW64); bản cũ có `wine64`.
+    /// Gcenx packages are laid out as "Wine Stable.app/Contents/Resources/wine/bin/wine".
+    /// Wine 10+ ships only `wine` (WoW64); older builds have `wine64`.
     static func findWineBinary(in root: URL) -> URL? {
         let fm = FileManager.default
         guard let walker = fm.enumerator(at: root, includingPropertiesForKeys: nil) else { return nil }

@@ -20,11 +20,11 @@ struct RootView: View {
                             .id(bottle.id)
                     } else {
                         ContentUnavailableView {
-                            Label("Chưa có bottle", systemImage: "shippingbox")
+                            Label("No Bottles", systemImage: "shippingbox")
                         } description: {
-                            Text("Bottle là một ổ C: Windows riêng. Mỗi nhóm chương trình nên có một bottle.")
+                            Text("A bottle is a separate Windows C: drive. Use one bottle for each group of programs.")
                         } actions: {
-                            Button("Tạo bottle") { showNewBottle = true }
+                            Button("Create Bottle") { showNewBottle = true }
                                 .buttonStyle(.borderedProminent)
                         }
                     }
@@ -38,13 +38,13 @@ struct RootView: View {
             ChooseBottleSheet(file: pending.url)
         }
         .confirmationDialog(
-            "Chuyển bottle “\(confirmDelete?.name ?? "")” vào Thùng rác?",
+            "Move bottle “\(confirmDelete?.name ?? "")” to the Trash?",
             isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } }),
             presenting: confirmDelete
         ) { bottle in
-            Button("Chuyển vào Thùng rác", role: .destructive) { model.delete(bottle) }
+            Button("Move to Trash", role: .destructive) { model.delete(bottle) }
         } message: { _ in
-            Text("Mọi chương trình và dữ liệu đã cài trong bottle này sẽ bị chuyển đi. Bạn có thể khôi phục từ Thùng rác.")
+            Text("All programs and data installed in this bottle will be moved to the Trash. You can restore it from the Trash.")
         }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             for p in providers {
@@ -58,7 +58,7 @@ struct RootView: View {
 
     private var sidebar: some View {
         List(selection: $model.selection) {
-            Section("Bottle") {
+            Section("Bottles") {
                 ForEach(model.bottles) { bottle in
                     HStack {
                         Label(bottle.name, systemImage: "shippingbox")
@@ -67,10 +67,10 @@ struct RootView: View {
                     }
                     .tag(bottle.id)
                     .contextMenu {
-                        Button("Mở ổ C: trong Finder") { NSWorkspace.shared.open(bottle.driveC) }
-                        Button("Tắt mọi chương trình") { model.kill(bottle) }
+                        Button("Show C: Drive in Finder") { NSWorkspace.shared.open(bottle.driveC) }
+                        Button("Force Quit All Programs") { model.kill(bottle) }
                         Divider()
-                        Button("Chuyển vào Thùng rác…", role: .destructive) { confirmDelete = bottle }
+                        Button("Move to Trash…", role: .destructive) { confirmDelete = bottle }
                     }
                 }
             }
@@ -78,7 +78,7 @@ struct RootView: View {
         .navigationSplitViewColumnWidth(min: 180, ideal: 210)
         .safeAreaInset(edge: .bottom) {
             Button { showNewBottle = true } label: {
-                Label("Bottle mới", systemImage: "plus")
+                Label("New Bottle", systemImage: "plus")
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.borderless)
@@ -92,7 +92,7 @@ private struct PendingFile: Identifiable {
     var id: String { url.path }
 }
 
-/// Thanh thông báo kết quả ở đáy cửa sổ — có link mở log, tự ẩn sau 8 giây.
+/// Result banner at the bottom of the window — links to the log and hides itself after 8 seconds.
 struct NoticeBar: View {
     @EnvironmentObject var model: AppModel
 
@@ -107,18 +107,18 @@ struct NoticeBar: View {
                     .lineLimit(3)
                 Spacer()
                 if let log = notice.log {
-                    Button("Xem log") { NSWorkspace.shared.open(log) }
+                    Button("Show Log") { NSWorkspace.shared.open(log) }
                 }
                 Button { model.notice = nil } label: { Image(systemName: "xmark") }
                     .buttonStyle(.borderless)
-                    .accessibilityLabel("Đóng thông báo")
+                    .accessibilityLabel("Dismiss Notification")
             }
             .padding(12)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
             .padding(12)
             .accessibilityElement(children: .combine)
             .task(id: notice.id) {
-                // Lỗi giữ lại cho đến khi người dùng đóng.
+                // Errors stay until the user dismisses them.
                 guard notice.kind == .success else { return }
                 try? await Task.sleep(for: .seconds(8))
                 if model.notice?.id == notice.id { model.notice = nil }

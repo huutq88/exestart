@@ -1,6 +1,6 @@
 import Foundation
 
-/// Tải file lớn bằng URLSession, báo tiến độ (0...1).
+/// Downloads large files with URLSession, reporting progress (0...1).
 final class Downloader: NSObject, URLSessionDownloadDelegate {
     private var continuation: CheckedContinuation<URL, Error>?
     private let destination: URL

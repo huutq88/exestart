@@ -1,7 +1,7 @@
 import Foundation
 
-/// Nơi ExeStart lưu mọi thứ. Mặc định: ~/Library/Application Support/ExeStart.
-/// Đặt biến môi trường EXESTART_HOME để đổi (hữu ích khi test).
+/// Where ExeStart stores everything. Default: ~/Library/Application Support/ExeStart.
+/// Set the EXESTART_HOME environment variable to override it (useful for tests).
 public struct Paths: Sendable {
     public let root: URL
 
@@ -23,7 +23,7 @@ public struct Paths: Sendable {
     public var cache: URL { root.appendingPathComponent("Cache", isDirectory: true) }
     public var settingsFile: URL { root.appendingPathComponent("settings.json") }
 
-    /// Shortcut .app tạo ra cho từng chương trình.
+    /// Shortcut .app bundles created for each program.
     public var shortcuts: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Applications/ExeStart", isDirectory: true)

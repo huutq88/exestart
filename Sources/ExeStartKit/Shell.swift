@@ -15,29 +15,29 @@ public enum ExeStartError: LocalizedError {
         switch self {
         case let .commandFailed(cmd, code, output):
             let tail = output.split(separator: "\n").suffix(15).joined(separator: "\n")
-            return "Lệnh \(cmd) thoát với mã \(code).\n\(tail)"
+            return "Command \(cmd) exited with code \(code).\n\(tail)"
         case .noRuntime:
-            return "Chưa cài Wine runtime. Chạy: exestart runtime install"
+            return "No Wine runtime installed. Run: exestart runtime install"
         case let .runtimeNotFound(id):
-            return "Không tìm thấy runtime '\(id)'. Xem danh sách: exestart runtime list"
+            return "Runtime '\(id)' not found. To list runtimes, run: exestart runtime list"
         case let .bottleExists(name):
-            return "Bottle '\(name)' đã tồn tại."
+            return "Bottle '\(name)' already exists."
         case let .bottleNotFound(name):
-            return "Không có bottle '\(name)'. Xem danh sách: exestart bottle list"
+            return "Bottle '\(name)' not found. To list bottles, run: exestart bottle list"
         case let .invalidName(name):
-            return "Tên '\(name)' không hợp lệ. Chỉ dùng chữ, số, dấu cách, '-', '_' và '.'."
+            return "Invalid name '\(name)'. Use only letters, digits, spaces, '-', '_' and '.'."
         case let .fileNotFound(path):
-            return "Không tìm thấy file: \(path)"
+            return "File not found: \(path)"
         case .rosettaMissing:
-            return "Wine cần Rosetta 2. Cài bằng: softwareupdate --install-rosetta --agree-to-license"
+            return "Wine requires Rosetta 2. Install it with: softwareupdate --install-rosetta --agree-to-license"
         case let .download(msg):
-            return "Tải thất bại: \(msg)"
+            return "Download failed: \(msg)"
         }
     }
 }
 
 enum Shell {
-    /// Chạy lệnh, chờ xong, trả về stdout+stderr. Ném lỗi nếu mã thoát khác 0.
+    /// Runs a command, waits for it, and returns stdout+stderr. Throws on a non-zero exit code.
     @discardableResult
     static func run(_ executable: String, _ arguments: [String],
                     environment: [String: String]? = nil,
@@ -61,7 +61,7 @@ enum Shell {
         return output
     }
 
-    /// Chạy lệnh, đẩy từng đoạn output ra `output`, trả về mã thoát (không ném lỗi khi mã khác 0).
+    /// Runs a command, streaming each output chunk to `output`, and returns the exit code (does not throw on non-zero).
     static func stream(_ executable: URL, _ arguments: [String],
                        environment: [String: String]? = nil,
                        currentDirectory: URL? = nil,
@@ -82,7 +82,7 @@ enum Shell {
         return try await withCheckedThrowingContinuation { cont in
             process.terminationHandler = { p in
                 pipe.fileHandleForReading.readabilityHandler = nil
-                // Đọc nốt phần còn trong pipe.
+                // Drain whatever is left in the pipe.
                 let rest = pipe.fileHandleForReading.readDataToEndOfFile()
                 if !rest.isEmpty { output?(String(decoding: rest, as: UTF8.self)) }
                 cont.resume(returning: p.terminationStatus)
@@ -94,7 +94,7 @@ enum Shell {
         }
     }
 
-    /// Thư mục hay chứa công cụ dev nhưng có thể không nằm trong PATH của app GUI.
+    /// Directories that often hold dev tools but may be missing from a GUI app's PATH.
     static var extraPaths: [String] {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return ["/opt/homebrew/bin", "/usr/local/bin", "\(home)/.cargo/bin", "/usr/local/go/bin",
@@ -108,7 +108,7 @@ enum Shell {
             .joined(separator: ":")
     }
 
-    /// Tìm file thực thi theo tên trong PATH (kèm extraPaths).
+    /// Finds an executable by name in PATH (plus extraPaths).
     static func which(_ tool: String) -> URL? {
         for dir in searchPath.split(separator: ":") {
             let path = "\(dir)/\(tool)"
@@ -118,7 +118,7 @@ enum Shell {
     }
 
     static var rosettaInstalled: Bool {
-        // Máy Intel không cần Rosetta.
+        // Intel Macs don't need Rosetta.
         #if arch(arm64)
         return FileManager.default.fileExists(atPath: "/Library/Apple/usr/libexec/oah/libRosettaRuntime")
         #else
@@ -127,7 +127,7 @@ enum Shell {
     }
 }
 
-/// Tên bottle/runtime: an toàn làm tên thư mục.
+/// Bottle/runtime name: safe to use as a directory name.
 func validateName(_ name: String) throws {
     let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: " -_."))
     guard !name.isEmpty, name.count <= 64, !name.hasPrefix("."),

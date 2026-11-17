@@ -1,6 +1,6 @@
 import Foundation
 
-/// Tạo file .app trong ~/Applications/ExeStart để mở chương trình Windows từ Launchpad/Spotlight/Dock.
+/// Creates an .app in ~/Applications/ExeStart to open a Windows program from Launchpad, Spotlight or the Dock.
 public enum Shortcut {
     @discardableResult
     public static func create(name: String, program: URL, wine: Wine, paths: Paths = .shared) throws -> URL {
@@ -14,7 +14,7 @@ public enum Shortcut {
         let args = Wine.arguments(for: program, extra: []).map(shellQuote).joined(separator: " ")
         let script = """
         #!/bin/sh
-        # Tạo bởi ExeStart — bottle: \(wine.bottle.name)
+        # Created by ExeStart. Bottle: \(wine.bottle.name)
         export WINEPREFIX=\(shellQuote(wine.bottle.prefix.path))
         export WINEDEBUG=-all
         \(wine.bottle.config.environment.sorted { $0.key < $1.key }

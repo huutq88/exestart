@@ -7,51 +7,51 @@ extension Arch: ExpressibleByArgument {}
 
 struct Build: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Build mã nguồn thành file .exe Windows ngay trên Mac.",
+        abstract: "Build source code into a Windows .exe right on your Mac.",
         discussion: """
-        Tự nhận diện dự án theo file trong thư mục:
+        Detects the project type from the files in the folder:
           go.mod → Go          Cargo.toml → Rust        CMakeLists.txt → C/C++ (CMake)
-          *.c / *.cpp → C/C++  *.csproj / *.sln → .NET  *.py → Python (PyInstaller qua Wine)
+          *.c / *.cpp → C/C++  *.csproj / *.sln → .NET  *.py → Python (PyInstaller)
 
-        Ví dụ:
-          exestart build                         # build thư mục hiện tại
-          exestart build ./hello.c --gui --run   # app có cửa sổ, chạy thử ngay bằng Wine
+        Examples:
+          exestart build                         # build the current folder
+          exestart build ./hello.c --gui --run   # windowed app, test-run in Wine
           exestart build ./tool --lang go --arch x86 -o dist/tool32.exe
-          exestart build ./app/main.py           # lần đầu tự cài Python Windows + PyInstaller
-          exestart build --dry-run               # chỉ in lệnh sẽ chạy
+          exestart build ./app/main.py           # installs Windows Python on 1st run
+          exestart build --dry-run               # only print the commands
 
-        Kết quả mặc định nằm ở <dự án>/build/windows/.
+        Output goes to <project>/build/windows/ by default.
         """)
 
-    @Argument(help: "Thư mục dự án hoặc file nguồn (mặc định: thư mục hiện tại).") var path: String = "."
-    @Option(name: .long, help: "Ngôn ngữ: \(ProjectKind.allCases.map(\.rawValue).joined(separator: ", ")).")
+    @Argument(help: "Project folder or source file (default: current folder).") var path: String = "."
+    @Option(name: .long, help: "Language: \(ProjectKind.allCases.map(\.rawValue).joined(separator: ", ")).")
     var lang: ProjectKind?
-    @Option(help: "Kiến trúc: x64 (mặc định) hoặc x86 (32-bit).") var arch: Arch = .x64
-    @Option(name: .shortAndLong, help: "File .exe hoặc thư mục đầu ra.") var output: String?
-    @Option(help: "Tên file .exe (không kèm đuôi).") var name: String?
-    @Flag(help: "App có cửa sổ: không mở kèm cửa sổ console.") var gui = false
-    @Flag(help: "Chạy thử file .exe bằng Wine sau khi build xong.") var run = false
-    @Option(name: .shortAndLong, help: "Bottle dùng khi --run.") var bottle: String?
-    @Flag(help: "Chỉ in các lệnh sẽ chạy, không build.") var dryRun = false
+    @Option(help: "Architecture: x64 (default) or x86 (32-bit).") var arch: Arch = .x64
+    @Option(name: .shortAndLong, help: "Output .exe file or folder.") var output: String?
+    @Option(help: "Name of the .exe file (without extension).") var name: String?
+    @Flag(help: "Windowed app: don't open a console window.") var gui = false
+    @Flag(help: "Test-run the .exe in Wine after the build.") var run = false
+    @Option(name: .shortAndLong, help: "Bottle to use with --run.") var bottle: String?
+    @Flag(help: "Only print the commands that would run; don't build.") var dryRun = false
 
     func run() async throws {
-        // stdout bị buffer khi pipe; tắt buffer để dòng của ExeStart và output của trình biên dịch đúng thứ tự.
+        // stdout is buffered when piped; disable buffering so ExeStart's lines and compiler output stay in order.
         setvbuf(stdout, nil, _IONBF, 0)
         let project = expand(path)
         guard FileManager.default.fileExists(atPath: project.path) else { throw ExeStartError.fileNotFound(project.path) }
         let options = BuildOptions(kind: lang, arch: arch, gui: gui, output: output.map(expand), name: name)
         guard let kind = options.kind ?? Builder.detect(project) else { throw BuildError.unknownProject(project.path) }
-        print("Dự án: \(kind.displayName) · \(arch.rawValue)\(gui ? " · GUI" : "")")
+        print("Project: \(kind.displayName) · \(arch.rawValue)\(gui ? " · GUI" : "")")
 
         let printer: @Sendable (String) -> Void = { FileHandle.standardOutput.write(Data($0.utf8)) }
         let exe: URL
         if kind == .python {
             if dryRun {
                 let script = try PythonBuilder.entryPoint(for: project)
-                print("Sẽ chạy PyInstaller cho \(script.path) trong bottle “\(PythonBuilder.bottleName)” (Python \(PythonBuilder.pythonVersion) bản Windows).")
+                print("Would run PyInstaller on \(script.path) in bottle “\(PythonBuilder.bottleName)” (Windows Python \(PythonBuilder.pythonVersion)).")
                 return
             }
-            _ = try bottles.runtimes.runtime(id: nil)   // cần Wine trước
+            _ = try bottles.runtimes.runtime(id: nil)   // Wine is required first
             exe = try await PythonBuilder(bottles: bottles).build(project, options: options, output: printer)
         } else {
             var opts = options
@@ -69,14 +69,14 @@ struct Build: AsyncParsableCommand {
         let size = (try? exe.resourceValues(forKeys: [.fileSizeKey]).fileSize).map {
             ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file)
         } ?? ""
-        print("✔ Đã build \(exe.path) \(size)")
+        print("✔ Built \(exe.path) \(size)")
 
         if run {
-            // Python: chạy luôn trong bottle vừa build (đã có sẵn Python runtime nếu cần).
+            // Python: run in the bottle used for the build (it already has the Python runtime if needed).
             let b = try resolveBottle(bottle ?? (kind == .python ? PythonBuilder.bottleName : nil))
             let wine = try bottles.wine(for: b)
             let (process, log) = try wine.launch(exe)
-            print("▶ Chạy thử trong bottle '\(b.name)' · log: \(log.path)")
+            print("▶ Test-running in bottle '\(b.name)' · log: \(log.path)")
             process.waitUntilExit()
             if let text = try? String(contentsOf: log, encoding: .utf8), !text.isEmpty { print(text) }
         }

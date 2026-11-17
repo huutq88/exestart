@@ -2,7 +2,7 @@ import ExeStartKit
 import SwiftUI
 
 struct BottleDetailView: View {
-    enum Tab: String, CaseIterable { case programs = "Chương trình", library = "Thư viện", settings = "Cài đặt" }
+    enum Tab: String, CaseIterable { case programs = "Programs", library = "Libraries", settings = "Settings" }
 
     @EnvironmentObject var model: AppModel
     let bottle: Bottle
@@ -17,10 +17,10 @@ struct BottleDetailView: View {
             }
         }
         .navigationTitle(bottle.name)
-        .navigationSubtitle(model.busy.contains(bottle.name) ? "Đang áp dụng thay đổi…" : bottle.config.windowsVersion.displayName)
+        .navigationSubtitle(model.busy.contains(bottle.name) ? "Applying changes…" : bottle.config.windowsVersion.displayName)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Picker("Mục", selection: $tab) {
+                Picker("Section", selection: $tab) {
                     ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
@@ -28,15 +28,15 @@ struct BottleDetailView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 Button { model.chooseFile(for: bottle) } label: {
-                    Label("Chạy file .exe…", systemImage: "play.fill")
+                    Label("Run .exe File…", systemImage: "play.fill")
                 }
-                .help("Chọn file .exe, .msi, .bat hoặc .lnk để chạy trong bottle này (⌘O)")
+                .help("Choose a .exe, .msi, .bat or .lnk file to run in this bottle (⌘O)")
             }
         }
     }
 }
 
-// MARK: - Chương trình
+// MARK: - Programs
 
 struct ProgramsView: View {
     @EnvironmentObject var model: AppModel
@@ -52,20 +52,20 @@ struct ProgramsView: View {
     var body: some View {
         Group {
             if !loaded {
-                ProgressView("Đang tìm chương trình…").frame(maxWidth: .infinity, maxHeight: .infinity)
+                ProgressView("Looking for programs…").frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if programs.isEmpty {
                 ContentUnavailableView {
-                    Label("Chưa cài chương trình nào", systemImage: "square.and.arrow.down")
+                    Label("No Programs Installed", systemImage: "square.and.arrow.down")
                 } description: {
-                    Text("Chạy file cài đặt (.exe hoặc .msi) — hoặc kéo thả file vào cửa sổ này. Sau khi cài, chương trình sẽ hiện ở đây.")
+                    Text("Run an installer (.exe or .msi), or drag a file into this window. Installed programs will appear here.")
                 } actions: {
-                    Button("Chạy file cài đặt…") { model.chooseFile(for: bottle) }
+                    Button("Run Installer…") { model.chooseFile(for: bottle) }
                         .buttonStyle(.borderedProminent)
                 }
             } else {
                 List {
                     if filtered.isEmpty {
-                        Text("Không có chương trình khớp “\(query)”.")
+                        Text("No programs match “\(query)”.")
                             .foregroundStyle(.secondary)
                     }
                     ForEach(filtered) { program in
@@ -73,7 +73,7 @@ struct ProgramsView: View {
                                    pinned: bottle.config.pinned.contains(program.url.path))
                     }
                 }
-                .searchable(text: $query, placement: .toolbar, prompt: "Tìm chương trình")
+                .searchable(text: $query, placement: .toolbar, prompt: "Search Programs")
             }
         }
         .task(id: bottle) { await load() }
@@ -105,7 +105,7 @@ struct ProgramRow: View {
                     Text(program.name).font(.body.weight(.medium))
                     if pinned {
                         Image(systemName: "pin.fill").font(.caption).foregroundStyle(.secondary)
-                            .accessibilityLabel("Đã ghim")
+                            .accessibilityLabel("Pinned")
                     }
                 }
                 Text(windowsPath)
@@ -115,22 +115,22 @@ struct ProgramRow: View {
                     .truncationMode(.middle)
             }
             Spacer()
-            Button("Mở") { model.run(program.url, in: bottle) }
-                .accessibilityLabel("Mở \(program.name)")
+            Button("Open") { model.run(program.url, in: bottle) }
+                .accessibilityLabel("Open \(program.name)")
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { model.run(program.url, in: bottle) }
         .contextMenu {
-            Button("Mở") { model.run(program.url, in: bottle) }
-            Button("Tạo app trong Launchpad") { model.createShortcut(program, in: bottle) }
-            Button(pinned ? "Bỏ ghim" : "Ghim lên đầu") { model.togglePin(program, in: bottle) }
+            Button("Open") { model.run(program.url, in: bottle) }
+            Button("Add to Launchpad") { model.createShortcut(program, in: bottle) }
+            Button(pinned ? "Unpin" : "Pin to Top") { model.togglePin(program, in: bottle) }
             Divider()
-            Button("Hiện trong Finder") { NSWorkspace.shared.activateFileViewerSelecting([program.url]) }
+            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([program.url]) }
         }
     }
 
-    /// Hiện đường dẫn kiểu Windows (C:\...) cho quen mắt.
+    /// Shows a Windows-style path (C:\...), which is more familiar to users.
     private var windowsPath: String {
         let c = bottle.driveC.path
         guard program.url.path.hasPrefix(c) else { return program.url.path }
@@ -138,7 +138,7 @@ struct ProgramRow: View {
     }
 }
 
-// MARK: - Thư viện (winetricks)
+// MARK: - Libraries (winetricks)
 
 struct LibraryView: View {
     @EnvironmentObject var model: AppModel
@@ -163,21 +163,21 @@ struct LibraryView: View {
                             Spacer()
                             if running == item.verb {
                                 ProgressView().controlSize(.small)
-                                Text("Đang cài…").foregroundStyle(.secondary)
+                                Text("Installing…").foregroundStyle(.secondary)
                             } else {
                                 if let r = lastResult, r.verb == item.verb {
-                                    Label(r.ok ? "Đã cài" : "Lỗi", systemImage: r.ok ? "checkmark.circle.fill" : "xmark.octagon.fill")
+                                    Label(r.ok ? "Installed" : "Failed", systemImage: r.ok ? "checkmark.circle.fill" : "xmark.octagon.fill")
                                         .foregroundStyle(r.ok ? .green : .red)
                                 }
-                                Button("Cài") { install(item.verb) }
+                                Button("Install") { install(item.verb) }
                                     .disabled(running != nil || installingTools)
                             }
                         }
                     }
                 } header: {
-                    Text("Thư viện Windows hay cần")
+                    Text("Common Windows Libraries")
                 } footer: {
-                    Text("Cài khi chương trình báo thiếu DLL, font lỗi hoặc cần .NET/Visual C++. Mỗi gói mất từ vài giây đến vài phút.")
+                    Text("Install these when a program reports a missing DLL, shows broken fonts, or needs .NET or Visual C++. Each package takes from a few seconds to a few minutes.")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -196,12 +196,12 @@ struct LibraryView: View {
                     .background(Color(nsColor: .textBackgroundColor))
                     .onChange(of: log) { proxy.scrollTo("end", anchor: .bottom) }
                 }
-                .accessibilityLabel("Nhật ký cài đặt")
+                .accessibilityLabel("Installation Log")
             }
         }
     }
 
-    /// Báo thiếu cabextract, kèm nút cài qua Homebrew (hoặc link cài Homebrew nếu máy chưa có).
+    /// Warns that cabextract is missing, with a button to install it via Homebrew (or a link to install Homebrew if it isn’t present).
     private var missingToolsBanner: some View {
         let names = missingTools.joined(separator: ", ")
         return HStack(alignment: .top, spacing: 12) {
@@ -209,22 +209,22 @@ struct LibraryView: View {
                 .foregroundStyle(.orange)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
-                Text("Thiếu \(names) — nhiều gói sẽ cài thất bại.")
+                Text("\(names) is missing — many packages will fail to install.")
                 Text(Homebrew.isInstalled
-                     ? "ExeStart có thể cài \(names) bằng Homebrew (vài giây)."
-                     : "Cần Homebrew để cài \(names). Cài Homebrew xong, mở lại tab này.")
+                     ? "ExeStart can install \(names) with Homebrew (takes a few seconds)."
+                     : "Homebrew is required to install \(names). After installing Homebrew, reopen this tab.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
             Spacer()
             if installingTools {
                 ProgressView().controlSize(.small)
-                Text("Đang cài…").foregroundStyle(.secondary)
+                Text("Installing…").foregroundStyle(.secondary)
             } else if Homebrew.isInstalled {
-                Button("Cài \(names)") { installTools() }
+                Button("Install \(names)") { installTools() }
                     .disabled(running != nil)
             } else {
-                Link("Mở brew.sh", destination: URL(string: Homebrew.website)!)
+                Link("Open brew.sh", destination: URL(string: Homebrew.website)!)
             }
         }
         .padding(.vertical, 4)
@@ -242,10 +242,10 @@ struct LibraryView: View {
                 }
                 missingTools = Winetricks.missingTools
                 model.show(ok ? .success : .error,
-                           ok ? "Đã cài cabextract. Giờ có thể cài các gói bên dưới."
-                              : "Homebrew chạy xong nhưng vẫn chưa thấy cabextract. Xem nhật ký bên dưới.")
+                           ok ? "Installed cabextract. You can now install the packages below."
+                              : "Homebrew finished, but cabextract still wasn’t found. See the log below.")
             } catch {
-                model.show(.error, "Chưa cài được cabextract: \(error.localizedDescription). Có thể tự chạy trong Terminal: brew install cabextract")
+                model.show(.error, "Couldn’t install cabextract: \(error.localizedDescription). You can run it yourself in Terminal: brew install cabextract")
             }
             installingTools = false
         }
@@ -269,18 +269,18 @@ struct LibraryView: View {
                 }
                 lastResult = (verb, code == 0)
                 model.show(code == 0 ? .success : .error,
-                           code == 0 ? "Đã cài \(verb) vào “\(bottle.name)”."
-                                     : "Cài \(verb) thất bại (mã \(code)). Xem nhật ký bên dưới.")
+                           code == 0 ? "Installed \(verb) in “\(bottle.name)”."
+                                     : "Installing \(verb) failed (code \(code)). See the log below.")
             } catch {
                 lastResult = (verb, false)
-                model.show(.error, "Không chạy được winetricks: \(error.localizedDescription)")
+                model.show(.error, "Couldn’t run winetricks: \(error.localizedDescription)")
             }
             running = nil
         }
     }
 }
 
-// MARK: - Cài đặt
+// MARK: - Settings
 
 struct BottleSettingsView: View {
     @EnvironmentObject var model: AppModel
@@ -291,43 +291,43 @@ struct BottleSettingsView: View {
     var body: some View {
         Form {
             Section("Windows") {
-                Picker("Phiên bản Windows", selection: binding(\.windowsVersion) { wine, v in
+                Picker("Windows Version", selection: binding(\.windowsVersion) { wine, v in
                     try wine.setWindowsVersion(v)
                 }) {
                     ForEach(WindowsVersion.allCases, id: \.self) { Text($0.displayName).tag($0) }
                 }
-                Picker("Wine runtime", selection: Binding(
+                Picker("Wine Runtime", selection: Binding(
                     get: { bottle.config.runtimeID ?? "" },
                     set: { id in
                         Task { await model.update(bottle, apply: { _ in }) { $0.runtimeID = id.isEmpty ? nil : id } }
                     })) {
-                    Text("Mặc định").tag("")
+                    Text("Default").tag("")
                     ForEach(model.runtimes) { Text($0.displayName).tag($0.id) }
                 }
             }
 
             Section {
-                Toggle("Retina mode", isOn: binding(\.retinaMode) { wine, on in try wine.setRetinaMode(on) })
-                Picker("Cỡ chữ & giao diện", selection: binding(\.dpi) { wine, dpi in try wine.setDPI(dpi) }) {
+                Toggle("Retina Mode", isOn: binding(\.retinaMode) { wine, on in try wine.setRetinaMode(on) })
+                Picker("Text & Interface Size", selection: binding(\.dpi) { wine, dpi in try wine.setDPI(dpi) }) {
                     Text("100% (96 DPI)").tag(96)
                     Text("125% (120 DPI)").tag(120)
                     Text("150% (144 DPI)").tag(144)
                     Text("200% (192 DPI)").tag(192)
                 }
             } header: {
-                Text("Hiển thị")
+                Text("Display")
             } footer: {
-                Text("Retina làm chữ nét hơn nhưng cửa sổ nhỏ lại — tăng tỉ lệ lên 150–200% để bù. Đóng và mở lại chương trình để thấy thay đổi.")
+                Text("Retina mode makes text sharper but windows smaller — raise the scale to 150–200% to compensate. Quit and reopen the program to see the change.")
                     .foregroundStyle(.secondary)
             }
 
-            Section("Công cụ Windows") {
-                LabeledContent("Ổ C:") {
-                    Button("Mở trong Finder") { NSWorkspace.shared.open(bottle.driveC) }
+            Section("Windows Tools") {
+                LabeledContent("C: Drive") {
+                    Button("Show in Finder") { NSWorkspace.shared.open(bottle.driveC) }
                 }
                 ForEach([WineTool.winecfg, .control, .uninstaller, .regedit, .taskmgr, .cmd], id: \.self) { tool in
                     LabeledContent(tool.displayName) {
-                        Button("Mở") {
+                        Button("Open") {
                             do { try model.manager.wine(for: bottle).openTool(tool) }
                             catch { model.show(.error, error.localizedDescription) }
                         }
@@ -336,8 +336,8 @@ struct BottleSettingsView: View {
             }
 
             Section {
-                LabeledContent("Chương trình bị treo?") {
-                    Button("Tắt mọi chương trình") { model.kill(bottle) }
+                LabeledContent("Program not responding?") {
+                    Button("Force Quit All Programs") { model.kill(bottle) }
                 }
             }
         }
@@ -345,7 +345,7 @@ struct BottleSettingsView: View {
         .disabled(busy)
     }
 
-    /// Binding đổi cấu hình rồi áp vào registry Wine ở nền.
+    /// Binding that updates the configuration and applies it to the Wine registry in the background.
     private func binding<T: Sendable>(_ key: WritableKeyPath<BottleConfig, T>,
                                       apply: @escaping @Sendable (Wine, T) throws -> Void) -> Binding<T> {
         Binding(

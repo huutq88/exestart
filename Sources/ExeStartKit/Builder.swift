@@ -1,6 +1,6 @@
 import Foundation
 
-/// Build dự án thành file .exe Windows ngay trên macOS bằng trình biên dịch chéo.
+/// Builds a project into a Windows .exe directly on macOS using a cross-compiler.
 public enum ProjectKind: String, CaseIterable, Sendable {
     case go, rust, cmake, c, cpp, dotnet, python
 
@@ -12,7 +12,7 @@ public enum ProjectKind: String, CaseIterable, Sendable {
         case .c: "C"
         case .cpp: "C++"
         case .dotnet: ".NET"
-        case .python: "Python (PyInstaller qua Wine)"
+        case .python: "Python (PyInstaller via Wine)"
         }
     }
 }
@@ -30,7 +30,7 @@ public enum Arch: String, CaseIterable, Sendable {
 public struct BuildOptions: Sendable {
     public var kind: ProjectKind?
     public var arch: Arch = .x64
-    /// Ứng dụng có cửa sổ: không bật cửa sổ console đen khi chạy.
+    /// GUI app: don't open a console window when it runs.
     public var gui = false
     public var output: URL?
     public var name: String?
@@ -41,7 +41,7 @@ public struct BuildOptions: Sendable {
     }
 }
 
-/// Một bước của quá trình build (một lệnh chạy native trên Mac).
+/// One step of the build (a command that runs natively on the Mac).
 public struct BuildStep: Sendable, Equatable {
     public let title: String
     public let tool: String
@@ -49,7 +49,7 @@ public struct BuildStep: Sendable, Equatable {
     public var environment: [String: String] = [:]
     public var directory: URL
 
-    /// Lệnh dạng in ra được cho người dùng xem/copy.
+    /// The command as printable text for the user to view or copy.
     public var commandLine: String {
         let env = environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
         return (env + [tool] + arguments.map(Shortcut.shellQuote)).joined(separator: " ")
@@ -60,11 +60,11 @@ public struct BuildPlan: Sendable {
     public let kind: ProjectKind
     public let project: URL
     public let steps: [BuildStep]
-    /// File .exe dự kiến. Với CMake/Rust thì tìm lại sau khi build.
+    /// The expected .exe. For CMake/Rust it is located after the build.
     public let output: URL
-    /// Công cụ cần có trên máy, kèm câu lệnh cài nếu thiếu.
+    /// Tools required on the machine, with the install command for each.
     public let requirements: [(tool: String, install: String)]
-    /// Nếu có: copy .exe tìm được về đây để mọi ngôn ngữ ra cùng một chỗ (build/windows).
+    /// If set: copy the found .exe here so every language outputs to the same place (build/windows).
     public var collectTo: URL? = nil
 }
 
@@ -79,17 +79,17 @@ public enum BuildError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case let .unknownProject(path):
-            return "Không nhận ra loại dự án ở \(path). Chỉ định bằng --lang (\(ProjectKind.allCases.map(\.rawValue).joined(separator: ", ")))."
+            return "Could not detect the project type at \(path). Specify it with --lang (\(ProjectKind.allCases.map(\.rawValue).joined(separator: ", ")))."
         case let .missingTools(list):
-            return "Thiếu công cụ để build:\n" + list.map { "  • \($0.tool) → \($0.install)" }.joined(separator: "\n")
+            return "Missing build tools:\n" + list.map { "  • \($0.tool) → \($0.install)" }.joined(separator: "\n")
         case let .missingRustTarget(target):
-            return "Rust chưa có target \(target). Cài bằng: rustup target add \(target)"
+            return "Rust target \(target) is not installed. Install it with: rustup target add \(target)"
         case let .noEntryPoint(msg):
             return msg
         case let .stepFailed(title, code):
-            return "Bước “\(title)” thất bại (mã \(code)). Xem output ở trên."
+            return "Step \"\(title)\" failed (exit code \(code)). See the output above."
         case let .noOutput(dir):
-            return "Build xong nhưng không tìm thấy file .exe trong \(dir)."
+            return "Build finished but no .exe was found in \(dir)."
         }
     }
 }
@@ -98,7 +98,7 @@ public struct Builder: Sendable {
     public let paths: Paths
     public init(paths: Paths = .shared) { self.paths = paths }
 
-    // MARK: Nhận diện dự án
+    // MARK: Project detection
 
     public static func detect(_ url: URL) -> ProjectKind? {
         let fm = FileManager.default
@@ -140,9 +140,9 @@ public struct Builder: Sendable {
         }.sorted { $0.path < $1.path }
     }
 
-    // MARK: Lập kế hoạch build
+    // MARK: Build planning
 
-    /// Tạo kế hoạch build cho các ngôn ngữ biên dịch chéo native (không gồm Python).
+    /// Creates a build plan for natively cross-compiled languages (not Python).
     public func plan(_ project: URL, options: BuildOptions = BuildOptions()) throws -> BuildPlan {
         let project = project.standardizedFileURL
         guard let kind = options.kind ?? Self.detect(project) else {
@@ -174,13 +174,13 @@ public struct Builder: Sendable {
             let cxx = kind == .cpp
             let compiler = "\(arch.mingwPrefix)-\(cxx ? "g++" : "gcc")"
             let sources = isDir.boolValue ? Self.cSources(in: dir).map(\.path) : [project.path]
-            guard !sources.isEmpty else { throw BuildError.noEntryPoint("Không có file .c/.cpp trong \(dir.path).") }
-            // -static: không phụ thuộc libgcc/libstdc++ DLL, copy sang máy Windows là chạy.
+            guard !sources.isEmpty else { throw BuildError.noEntryPoint("No .c/.cpp files in \(dir.path).") }
+            // -static: no libgcc/libstdc++ DLL dependency, so the .exe runs as-is on any Windows machine.
             var args = sources + ["-O2", "-static", "-o", output.path]
             if options.gui { args.append("-mwindows") }
             if cxx { args.insert("-std=c++17", at: 0) }
             return BuildPlan(kind: kind, project: project, steps: [
-                BuildStep(title: "Biên dịch bằng MinGW-w64", tool: compiler, arguments: args, directory: dir),
+                BuildStep(title: "Compile with MinGW-w64", tool: compiler, arguments: args, directory: dir),
             ], output: output, requirements: [(compiler, "brew install mingw-w64")])
 
         case .cmake:
@@ -202,7 +202,7 @@ public struct Builder: Sendable {
                collectTo: outDir)
 
         case .rust:
-            // Ưu tiên cargo-xwin (target MSVC, giống build trên Windows nhất); nếu không có thì dùng GNU + MinGW.
+            // Prefer cargo-xwin (MSVC target, closest to building on Windows); otherwise fall back to GNU + MinGW.
             let release = ["--release"]
             if Shell.which("cargo-xwin") != nil {
                 return BuildPlan(kind: kind, project: project, steps: [
@@ -219,7 +219,7 @@ public struct Builder: Sendable {
                           environment: [envKey: linker], directory: dir),
             ], output: dir.appendingPathComponent("target/\(arch.rustGNU)/release"),
                requirements: [("cargo", "curl https://sh.rustup.rs -sSf | sh"),
-                              (linker, "brew install mingw-w64 (hoặc: cargo install cargo-xwin)")],
+                              (linker, "brew install mingw-w64 (or: cargo install cargo-xwin)")],
                collectTo: outDir)
 
         case .dotnet:
@@ -227,25 +227,25 @@ public struct Builder: Sendable {
             if !isDir.boolValue { args.append(project.path) }
             args += ["-c", "Release", "-r", arch.dotnetRID, "--self-contained", "true",
                      "-p:PublishSingleFile=true", "-p:IncludeNativeLibrariesForSelfExtract=true",
-                     // Cho phép build WinForms/WPF từ máy không phải Windows.
+                     // Allow building WinForms/WPF on a non-Windows machine.
                      "-p:EnableWindowsTargeting=true", "-o", outDir.path]
             return BuildPlan(kind: kind, project: project, steps: [
                 BuildStep(title: "dotnet publish", tool: "dotnet", arguments: args, directory: dir),
             ], output: outDir, requirements: [("dotnet", "brew install --cask dotnet-sdk")])
 
         case .python:
-            throw BuildError.noEntryPoint("Python build qua Wine — dùng PythonBuilder.")
+            throw BuildError.noEntryPoint("Python builds run through Wine; use PythonBuilder")
         }
     }
 
-    /// Kiểm tra công cụ còn thiếu trước khi chạy.
+    /// Checks for missing tools before running.
     public static func missingRequirements(_ plan: BuildPlan) -> [(tool: String, install: String)] {
         plan.requirements.filter { Shell.which($0.tool) == nil }
     }
 
-    // MARK: Chạy
+    // MARK: Running
 
-    /// Chạy kế hoạch, trả về file .exe tạo ra.
+    /// Runs the plan and returns the produced .exe.
     public func execute(_ plan: BuildPlan, output: (@Sendable (String) -> Void)? = nil) async throws -> URL {
         let missing = Self.missingRequirements(plan)
         guard missing.isEmpty else { throw BuildError.missingTools(missing) }
@@ -284,13 +284,13 @@ public struct Builder: Sendable {
         return dest
     }
 
-    /// File .exe mới nhất được tạo sau `since` (dùng cho CMake/Rust/.NET khi tên file do dự án quyết định).
+    /// The newest .exe created after `since` (used for CMake/Rust/.NET, where the project decides the file name).
     static func newestExe(in dir: URL, since: Date) -> URL? {
         guard let walker = FileManager.default.enumerator(
             at: dir, includingPropertiesForKeys: [.contentModificationDateKey]) else { return nil }
         var best: (URL, Date)?
         for case let url as URL in walker where url.pathExtension.lowercased() == "exe" {
-            // Bỏ qua file trong thư mục deps/build script của cargo và CMakeFiles.
+            // Skip files in cargo's deps/build-script directories and in CMakeFiles.
             if url.path.contains("/deps/") || url.path.contains("/CMakeFiles/") || url.path.contains("/build/") && url.path.contains("/out/") { continue }
             let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
             guard date >= since.addingTimeInterval(-2) else { continue }

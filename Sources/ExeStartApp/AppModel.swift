@@ -3,7 +3,7 @@ import ExeStartKit
 import Foundation
 import SwiftUI
 
-/// Trạng thái dùng chung của app. Mọi thao tác nặng (Wine, mạng) chạy ngoài main thread.
+/// Shared app state. All heavy work (Wine, networking) runs off the main thread.
 @MainActor
 final class AppModel: ObservableObject {
     enum InstallState: Equatable {
@@ -29,9 +29,9 @@ final class AppModel: ObservableObject {
     @Published var latestStable: RemoteRuntime?
     @Published var loadingRemote = false
     @Published var notice: Notice?
-    /// Bottle đang bận (tạo mới, đổi cấu hình...) — khoá nút để tránh bấm trùng.
+    /// Bottles that are busy (being created, reconfigured...) — disables buttons to prevent double clicks.
     @Published var busy: Set<String> = []
-    /// File mở từ Finder khi có nhiều bottle: hỏi người dùng chọn bottle.
+    /// File opened from Finder while there are several bottles: ask the user which bottle to use.
     @Published var pendingFile: URL?
 
     var selectedBottle: Bottle? { bottles.first { $0.id == selection } }
@@ -59,15 +59,15 @@ final class AppModel: ObservableObject {
             latestStable = try await manager.runtimes.available().first { $0.channel == "stable" }
             if case .failed = installState { installState = .idle }
         } catch {
-            installState = .failed("Không lấy được danh sách Wine từ GitHub. Kiểm tra mạng rồi thử lại.\n(\(error.localizedDescription))")
+            installState = .failed("Couldn’t get the list of Wine builds from GitHub. Check your internet connection and try again.\n(\(error.localizedDescription))")
         }
     }
 
     func installRuntime() async {
-        if case .working = installState { return }   // chống bấm trùng
+        if case .working = installState { return }   // prevent double clicks
         if latestStable == nil { await fetchLatestStable() }
         guard let remote = latestStable else { return }
-        installState = .working("Chuẩn bị tải", 0)
+        installState = .working("Preparing download", 0)
         do {
             try await manager.runtimes.install(remote) { label, p in
                 Task { @MainActor in self.installState = .working(label, p) }
@@ -92,7 +92,7 @@ final class AppModel: ObservableObject {
             let b = try await Task.detached { try mgr.create(name: name, windowsVersion: windows) }.value
             reload()
             selection = b.id
-            show(.success, "Đã tạo bottle “\(b.name)”. Chạy file cài đặt .exe để bắt đầu.")
+            show(.success, "Created bottle “\(b.name)”. Run a .exe installer to get started.")
             return true
         } catch {
             show(.error, error.localizedDescription)
@@ -104,13 +104,13 @@ final class AppModel: ObservableObject {
         do {
             try manager.delete(bottle)
             reload()
-            show(.success, "Đã chuyển bottle “\(bottle.name)” vào Thùng rác. Có thể khôi phục từ Thùng rác.")
+            show(.success, "Moved bottle “\(bottle.name)” to the Trash. You can restore it from the Trash.")
         } catch {
             show(.error, error.localizedDescription)
         }
     }
 
-    /// Ghi cấu hình rồi áp vào Wine (registry). Chạy nền vì wineserver có thể mất vài giây.
+    /// Saves the configuration and applies it to Wine (registry). Runs in the background because wineserver can take a few seconds.
     func update(_ bottle: Bottle, apply: @escaping @Sendable (Wine) throws -> Void,
                 change: (inout BottleConfig) -> Void) async {
         var b = bottle
@@ -127,12 +127,12 @@ final class AppModel: ObservableObject {
             }.value
             reload()
         } catch {
-            show(.error, "Chưa lưu được thay đổi: \(error.localizedDescription)")
+            show(.error, "Couldn’t save changes: \(error.localizedDescription)")
             reload()
         }
     }
 
-    // MARK: Chạy chương trình
+    // MARK: Running programs
 
     func run(_ file: URL, in bottle: Bottle) {
         do {
@@ -141,26 +141,26 @@ final class AppModel: ObservableObject {
             let (_, log) = try wine.launch(file) { code in
                 guard code != 0 else { return }
                 Task { @MainActor in
-                    self.show(.error, "“\(name)” đã thoát với mã lỗi \(code). Xem log để biết nguyên nhân.", log: nil)
+                    self.show(.error, "“\(name)” exited with code \(code). Check the log for details.", log: nil)
                 }
             }
-            show(.success, "Đang mở “\(name)” trong “\(bottle.name)”. Cửa sổ có thể mất vài giây để hiện.", log: log)
-            // Chương trình cài đặt có thể tạo shortcut mới — làm mới danh sách sau ít lâu.
+            show(.success, "Opening “\(name)” in “\(bottle.name)”. The window may take a few seconds to appear.", log: log)
+            // Installers may create new shortcuts — refresh the list after a short delay.
             Task { try? await Task.sleep(for: .seconds(8)); self.reload() }
         } catch {
             show(.error, error.localizedDescription)
         }
     }
 
-    /// Được gọi khi người dùng mở .exe từ Finder hoặc kéo vào cửa sổ.
+    /// Called when the user opens a .exe from Finder or drops it onto the window.
     func open(_ file: URL) {
         if bottles.count == 1 { run(file, in: bottles[0]) } else { pendingFile = file }
     }
 
     func chooseFile(for bottle: Bottle) {
         let panel = NSOpenPanel()
-        panel.title = "Chọn chương trình Windows"
-        panel.prompt = "Chạy"
+        panel.title = "Choose a Windows Program"
+        panel.prompt = "Run"
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.allowedContentTypes = []
@@ -172,7 +172,7 @@ final class AppModel: ObservableObject {
         do {
             let app = try Shortcut.create(name: program.name, program: program.url,
                                           wine: try manager.wine(for: bottle))
-            show(.success, "Đã tạo “\(program.name).app” trong ~/Applications/ExeStart.", log: nil)
+            show(.success, "Created “\(program.name).app” in ~/Applications/ExeStart.", log: nil)
             NSWorkspace.shared.activateFileViewerSelecting([app])
         } catch {
             show(.error, error.localizedDescription)
@@ -191,6 +191,6 @@ final class AppModel: ObservableObject {
     func kill(_ bottle: Bottle) {
         let mgr = manager
         Task.detached { try? mgr.wine(for: bottle).kill() }
-        show(.success, "Đã tắt mọi chương trình trong “\(bottle.name)”.")
+        show(.success, "Quit all programs in “\(bottle.name)”.")
     }
 }

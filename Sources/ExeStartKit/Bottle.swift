@@ -1,6 +1,6 @@
 import Foundation
 
-/// Phiên bản Windows mà Wine giả lập (giá trị dùng cho `winecfg /v`).
+/// The Windows version Wine emulates (value passed to `winecfg /v`).
 public enum WindowsVersion: String, Codable, CaseIterable, Sendable {
     case win11, win10, win81, win8, win7, winxp
 
@@ -22,7 +22,7 @@ public struct BottleConfig: Codable, Sendable, Equatable {
     public var retinaMode: Bool = false
     public var dpi: Int = 96
     public var environment: [String: String] = [:]
-    /// Đường dẫn Unix tới các .exe người dùng ghim.
+    /// Unix paths of the .exe files the user pinned.
     public var pinned: [String] = []
     public var createdAt: Date = Date()
 
@@ -31,7 +31,7 @@ public struct BottleConfig: Codable, Sendable, Equatable {
         self.windowsVersion = windowsVersion
     }
 
-    // Đọc được file cũ thiếu khoá.
+    // Tolerate older files with missing keys.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         runtimeID = try c.decodeIfPresent(String.self, forKey: .runtimeID)
@@ -44,7 +44,7 @@ public struct BottleConfig: Codable, Sendable, Equatable {
     }
 }
 
-/// Một "bottle" là một Wine prefix riêng: ổ C:, registry và cấu hình độc lập.
+/// A "bottle" is a separate Wine prefix with its own C: drive, registry and settings.
 public struct Bottle: Identifiable, Hashable, Sendable {
     public let name: String
     public let directory: URL
@@ -66,7 +66,7 @@ public struct Bottle: Identifiable, Hashable, Sendable {
     }
 }
 
-/// Một chương trình tìm thấy trong bottle.
+/// A program found in a bottle.
 public struct Program: Identifiable, Hashable, Sendable {
     public enum Kind: String, Sendable { case pinned, startMenu, executable }
     public let name: String
@@ -104,7 +104,7 @@ public final class BottleManager: @unchecked Sendable {
         return Bottle(name: dir.lastPathComponent, directory: dir, config: config)
     }
 
-    /// Tạo bottle mới và chạy `wineboot --init` để dựng ổ C: và registry.
+    /// Creates a new bottle and runs `wineboot --init` to set up the C: drive and registry.
     @discardableResult
     public func create(name: String, runtimeID: String? = nil,
                        windowsVersion: WindowsVersion = .win10) throws -> Bottle {
@@ -140,7 +140,7 @@ public final class BottleManager: @unchecked Sendable {
         Wine(bottle: bottle, runtime: try runtimes.runtime(id: bottle.config.runtimeID))
     }
 
-    // MARK: Chương trình
+    // MARK: Programs
 
     public func programs(in bottle: Bottle) -> [Program] {
         var seen = Set<String>()
@@ -172,7 +172,7 @@ public final class BottleManager: @unchecked Sendable {
     }
 
     private func installedExecutables(in bottle: Bottle) -> [Program] {
-        // Bỏ qua các chương trình Wine tự cài sẵn.
+        // Skip programs that Wine installs by default.
         let builtin: Set<String> = ["Common Files", "Internet Explorer", "Windows Media Player",
                                     "Windows NT", "Microsoft.NET", "Windows Mail", "Windows Defender"]
         var result: [Program] = []
@@ -193,6 +193,7 @@ public final class BottleManager: @unchecked Sendable {
 
     static func isNoise(_ name: String) -> Bool {
         let n = name.lowercased()
+        // "gỡ" is Vietnamese for "uninstall" and matches localized uninstaller names.
         let words = ["unins", "uninstall", "gỡ", "setup", "update", "crashreport", "crashpad",
                      "helper", "elevat", "vcredist", "dxsetup", "readme", "help", "license"]
         return words.contains { n.contains($0) }

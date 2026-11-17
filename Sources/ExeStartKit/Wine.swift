@@ -1,6 +1,6 @@
 import Foundation
 
-/// Chạy Wine trong một bottle cụ thể.
+/// Runs Wine in a specific bottle.
 public struct Wine: Sendable {
     public let bottle: Bottle
     public let runtime: Runtime
@@ -15,18 +15,18 @@ public struct Wine: Sendable {
         var env = ProcessInfo.processInfo.environment
         env["WINEPREFIX"] = bottle.prefix.path
         env["WINEDEBUG"] = verbose ? "err+all,warn+module" : "-all"
-        // MoltenVK (Vulkan → Metal) mặc định in hàng trăm dòng thông tin GPU vào log.
+        // By default MoltenVK (Vulkan → Metal) writes hundreds of lines of GPU info to the log.
         if !verbose, env["MVK_CONFIG_LOG_LEVEL"] == nil { env["MVK_CONFIG_LOG_LEVEL"] = "0" }
         env["PATH"] = runtime.binDirectory.path + ":" + (env["PATH"] ?? "/usr/bin:/bin")
-        // Font chữ Việt/Á hiển thị đúng khi app không tự set locale.
+        // Render Vietnamese/Asian text correctly when the app doesn't set its own locale.
         if env["LANG"] == nil { env["LANG"] = "en_US.UTF-8" }
         for (k, v) in bottle.config.environment { env[k] = v }
         return env
     }
 
-    // MARK: Chạy chương trình
+    // MARK: Running programs
 
-    /// Cách gọi Wine cho từng loại file.
+    /// How to invoke Wine for each file type.
     static func arguments(for file: URL, extra: [String]) -> [String] {
         switch file.pathExtension.lowercased() {
         case "msi": return ["msiexec", "/i", file.path] + extra
@@ -36,7 +36,7 @@ public struct Wine: Sendable {
         }
     }
 
-    /// Khởi động chương trình, ghi log ra bottle/logs. Trả về Process đang chạy.
+    /// Launches a program, logging to bottle/logs. Returns the running Process.
     @discardableResult
     public func launch(_ file: URL, arguments extra: [String] = [],
                        onExit: (@Sendable (Int32) -> Void)? = nil) throws -> (Process, URL) {
@@ -53,7 +53,7 @@ public struct Wine: Sendable {
         process.executableURL = runtime.wineBinary
         process.arguments = Self.arguments(for: file, extra: extra)
         process.environment = environment
-        // Nhiều app Windows đọc file cạnh .exe theo đường dẫn tương đối.
+        // Many Windows apps read files next to the .exe via relative paths.
         process.currentDirectoryURL = file.deletingLastPathComponent()
         process.standardOutput = handle
         process.standardError = handle
@@ -65,13 +65,13 @@ public struct Wine: Sendable {
         return (process, log)
     }
 
-    /// Chạy một lệnh Wine dựng sẵn (winecfg, regedit, ...) và chờ xong.
+    /// Runs a built-in Wine command (winecfg, regedit, ...) and waits for it to finish.
     @discardableResult
     public func run(_ arguments: [String]) throws -> String {
         try Shell.run(runtime.wineBinary.path, arguments, environment: environment)
     }
 
-    /// Mở công cụ Wine có giao diện mà không chặn luồng gọi.
+    /// Opens a Wine GUI tool without blocking the calling thread.
     public func openTool(_ tool: WineTool) throws {
         let process = Process()
         process.executableURL = runtime.wineBinary
@@ -82,7 +82,7 @@ public struct Wine: Sendable {
         try process.run()
     }
 
-    // MARK: Quản lý prefix
+    // MARK: Prefix management
 
     public func boot() throws {
         try FileManager.default.createDirectory(at: bottle.prefix, withIntermediateDirectories: true)
@@ -95,7 +95,7 @@ public struct Wine: Sendable {
         waitServer()
     }
 
-    /// Retina: vẽ ở độ phân giải gốc của màn hình Mac (chữ nét hơn, cửa sổ nhỏ hơn).
+    /// Retina: render at the Mac display's native resolution (sharper text, smaller windows).
     public func setRetinaMode(_ on: Bool) throws {
         try regAdd(key: #"HKCU\Software\Wine\Mac Driver"#, value: "RetinaMode", type: "REG_SZ", data: on ? "y" : "n")
     }
@@ -109,17 +109,17 @@ public struct Wine: Sendable {
         waitServer()
     }
 
-    /// Tắt mọi tiến trình Wine của bottle.
+    /// Kills all Wine processes of the bottle.
     public func kill() {
         _ = try? Shell.run(runtime.wineserver.path, ["-k"], environment: environment)
     }
 
-    /// Chờ wineserver ghi registry xuống đĩa.
+    /// Waits for wineserver to flush the registry to disk.
     public func waitServer() {
         _ = try? Shell.run(runtime.wineserver.path, ["-w"], environment: environment)
     }
 
-    /// wineserver của prefix đang chạy thì có socket tại /tmp/.wine-<uid>/server-<dev>-<inode>/socket.
+    /// While a prefix's wineserver is running, it has a socket at /tmp/.wine-<uid>/server-<dev>-<inode>/socket.
     public var isRunning: Bool {
         var st = stat()
         guard stat(bottle.prefix.path, &st) == 0 else { return false }
@@ -142,12 +142,12 @@ public enum WineTool: String, CaseIterable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .winecfg: "Cấu hình Wine"
+        case .winecfg: "Wine Configuration"
         case .regedit: "Registry"
         case .taskmgr: "Task Manager"
         case .control: "Control Panel"
-        case .uninstaller: "Gỡ chương trình"
-        case .explorer: "Duyệt ổ C:"
+        case .uninstaller: "Uninstall Programs"
+        case .explorer: "Browse C: Drive"
         case .cmd: "Command Prompt"
         }
     }

@@ -1,7 +1,7 @@
 import Foundation
 
-/// Python không biên dịch chéo được, nên ExeStart chạy Python *bản Windows* + PyInstaller bên trong Wine.
-/// Lần đầu: tạo bottle "Python Build", tải trình cài Python từ python.org và cài PyInstaller.
+/// Python can't be cross-compiled, so ExeStart runs the *Windows* Python + PyInstaller inside Wine.
+/// On first use it creates the "Python Build" bottle, downloads the Python installer from python.org and installs PyInstaller.
 public struct PythonBuilder: Sendable {
     public static let pythonVersion = "3.12.10"
     public static let installerURL = URL(string: "https://www.python.org/ftp/python/\(pythonVersion)/python-\(pythonVersion)-amd64.exe")!
@@ -13,7 +13,7 @@ public struct PythonBuilder: Sendable {
 
     // MARK: Entry point
 
-    /// Tìm file .py chính: file được chỉ định, hoặc main.py / app.py / __main__.py / <tên thư mục>.py.
+    /// Finds the main .py file: the given file, or main.py / app.py / __main__.py / <directory name>.py.
     public static func entryPoint(for project: URL) throws -> URL {
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: project.path, isDirectory: &isDir) else {
@@ -29,10 +29,10 @@ public struct PythonBuilder: Sendable {
             .filter { $0.hasSuffix(".py") && !$0.hasPrefix("test") && $0 != "setup.py" }
         if pys.count == 1 { return project.appendingPathComponent(pys[0]) }
         throw BuildError.noEntryPoint(
-            "Không biết file Python nào là file chính trong \(project.path). Hãy chỉ thẳng file, vd. exestart build \(project.path)/main.py")
+            "Could not tell which Python file is the entry point in \(project.path). Pass the file directly, e.g. exestart build \(project.path)/main.py")
     }
 
-    /// Đường dẫn Unix → Windows qua ổ Z: (Wine map Z: = thư mục gốc /).
+    /// Converts a Unix path to a Windows path via drive Z: (Wine maps Z: to the root /).
     static func windowsPath(_ url: URL) -> String {
         "Z:" + url.standardizedFileURL.path.replacingOccurrences(of: "/", with: #"\"#)
     }
@@ -42,7 +42,7 @@ public struct PythonBuilder: Sendable {
     public func build(_ project: URL, options: BuildOptions,
                       output: (@Sendable (String) -> Void)? = nil) async throws -> URL {
         if options.arch != .x64 {
-            throw BuildError.noEntryPoint("Build Python hiện chỉ hỗ trợ x64.")
+            throw BuildError.noEntryPoint("Python builds currently support x64 only.")
         }
         let script = try Self.entryPoint(for: project.standardizedFileURL)
         let dir = script.deletingLastPathComponent()
@@ -57,7 +57,7 @@ public struct PythonBuilder: Sendable {
 
         let requirements = dir.appendingPathComponent("requirements.txt")
         if FileManager.default.fileExists(atPath: requirements.path) {
-            output?("▸ Cài thư viện từ requirements.txt\n")
+            output?("▸ Installing libraries from requirements.txt\n")
             try await runPython(wine, python, ["-m", "pip", "install", "--disable-pip-version-check",
                                                "-r", Self.windowsPath(requirements)], in: dir, output: output)
         }
@@ -77,13 +77,13 @@ public struct PythonBuilder: Sendable {
         return exe
     }
 
-    /// Dựng bottle có Python + PyInstaller nếu chưa có. Trả về Wine của bottle đó.
+    /// Sets up the bottle with Python + PyInstaller if needed. Returns that bottle's Wine.
     public func prepare(output: (@Sendable (String) -> Void)? = nil) async throws -> Wine {
         let bottle: Bottle
         if let existing = try? bottles.bottle(named: Self.bottleName) {
             bottle = existing
         } else {
-            output?("▸ Tạo bottle “\(Self.bottleName)” (một lần, ~30 giây)\n")
+            output?("▸ Creating bottle \"\(Self.bottleName)\" (one time, ~30 seconds)\n")
             let mgr = bottles
             bottle = try await Task.detached { try mgr.create(name: Self.bottleName) }.value
         }
@@ -93,10 +93,10 @@ public struct PythonBuilder: Sendable {
         if !FileManager.default.fileExists(atPath: python.path) {
             let installer = bottles.paths.cache.appendingPathComponent(Self.installerURL.lastPathComponent)
             if !FileManager.default.fileExists(atPath: installer.path) {
-                output?("▸ Tải Python \(Self.pythonVersion) cho Windows từ python.org\n")
+                output?("▸ Downloading Python \(Self.pythonVersion) for Windows from python.org\n")
                 _ = try await Downloader.download(Self.installerURL, to: installer)
             }
-            output?("▸ Cài Python \(Self.pythonVersion) vào bottle (1–3 phút)\n")
+            output?("▸ Installing Python \(Self.pythonVersion) into the bottle (1–3 minutes)\n")
             let code = try await Shell.stream(
                 wine.runtime.wineBinary,
                 [installer.path, "/quiet", "InstallAllUsers=0", "PrependPath=0", "Include_test=0",
@@ -105,13 +105,13 @@ public struct PythonBuilder: Sendable {
                 environment: wine.environment, output: nil)
             wine.waitServer()
             guard code == 0, FileManager.default.fileExists(atPath: python.path) else {
-                throw BuildError.stepFailed("Cài Python cho Windows", code)
+                throw BuildError.stepFailed("Install Python for Windows", code)
             }
         }
 
         let pyinstaller = bottle.driveC.appendingPathComponent("Python312/Scripts/pyinstaller.exe")
         if !FileManager.default.fileExists(atPath: pyinstaller.path) {
-            output?("▸ Cài PyInstaller\n")
+            output?("▸ Installing PyInstaller\n")
             try await runPython(wine, python, ["-m", "pip", "install", "--disable-pip-version-check", "pyinstaller"],
                                 in: nil, output: output)
         }

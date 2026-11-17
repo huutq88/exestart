@@ -1,7 +1,7 @@
 #!/bin/bash
-# Đóng gói ExeStart.app (SwiftUI) và CLI `exestart` vào thư mục dist/.
-#   ./scripts/build-app.sh            # bản release
-#   ./scripts/build-app.sh --install  # thêm: copy app vào ~/Applications, CLI vào ~/.local/bin
+# Packages ExeStart.app (SwiftUI) and the `exestart` CLI into dist/.
+#   ./scripts/build-app.sh            # release build
+#   ./scripts/build-app.sh --install  # also copy the app to ~/Applications and the CLI to ~/.local/bin
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -48,7 +48,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# Ký ad-hoc để Gatekeeper cho chạy trên chính máy này.
+# Ad-hoc sign so Gatekeeper lets it run on this Mac.
 codesign --force --deep --sign - "$APP" >/dev/null
 echo "✔ $APP"
 echo "✔ $DIST/exestart"
@@ -60,6 +60,6 @@ if [[ "${1:-}" == "--install" ]]; then
   cp "$DIST/exestart" "$HOME/.local/bin/exestart"
   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
     -f "$HOME/Applications/ExeStart.app" || true
-  echo "✔ Đã cài ~/Applications/ExeStart.app và ~/.local/bin/exestart"
-  [[ ":$PATH:" == *":$HOME/.local/bin:"* ]] || echo "  Thêm vào PATH: export PATH=\"\$HOME/.local/bin:\$PATH\""
+  echo "✔ Installed ~/Applications/ExeStart.app and ~/.local/bin/exestart"
+  [[ ":$PATH:" == *":$HOME/.local/bin:"* ]] || echo "  Add to your PATH: export PATH=\"\$HOME/.local/bin:\$PATH\""
 fi

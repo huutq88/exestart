@@ -7,13 +7,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var queued: [URL] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Khi chạy bằng `swift run` (không có bundle) app vẫn hiện Dock và nhận focus.
+        // When launched via `swift run` (no bundle), still show in the Dock and take focus.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         flush()
     }
 
-    /// Finder: "Open With → ExeStart" hoặc kéo .exe lên icon Dock.
+    /// Finder: "Open With → ExeStart", or a .exe dropped onto the Dock icon.
     func application(_ application: NSApplication, open urls: [URL]) {
         queued += urls
         flush()
@@ -46,7 +46,7 @@ struct ExeStartApp: App {
         }
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("Chạy file Windows…") {
+                Button("Run Windows Program…") {
                     if let b = model.selectedBottle { model.chooseFile(for: b) }
                 }
                 .keyboardShortcut("o")
